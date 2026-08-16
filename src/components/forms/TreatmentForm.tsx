@@ -5,7 +5,7 @@ import { FormRow, StarRating, Textarea } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
 import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
-import { useServices } from '@/hooks/useCustomers'
+import { useServices, useCustomerList } from '@/hooks/useCustomers'
 import { useAuth } from '@/hooks/useAuth'
 import { createTreatment } from '@/lib/mutations'
 import { PAYMENT_METHODS } from '@/types/database'
@@ -16,15 +16,20 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
   open: boolean
   onClose: () => void
   onSaved: () => void
-  customerId: string
+  /** Omit to show a customer picker — lets the form be opened from anywhere,
+   *  not just from inside a customer's profile. */
+  customerId?: string
 }) {
   const { t, locale } = useI18n()
   const toast = useToast()
   const services = useServices()
   const { staff } = useAuth()
 
+  const customers = useCustomerList()
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [pickedCustomer, setPickedCustomer] = useState('')
+  const [customerQuery, setCustomerQuery] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [detail, setDetail] = useState('')
   const [date, setDate] = useState(today())
@@ -34,8 +39,11 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
   const [remark, setRemark] = useState('')
   const [rating, setRating] = useState<number | null>(null)
 
+  const targetCustomer = customerId ?? pickedCustomer
+
   async function submit() {
     const next: Record<string, string> = {}
+    if (!targetCustomer) next.customer = t.form.required
     if (!serviceId) next.service = t.form.required
     const amt = Number(amount)
     if (!amount.trim() || Number.isNaN(amt) || amt < 0) next.amount = t.form.invalidAmount
@@ -45,11 +53,18 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
     setSaving(true)
     try {
       await createTreatment(
-        { customer_id: customerId, service_id: serviceId, detail, treatment_date: date,
+        { customer_id: targetCustomer, service_id: serviceId, detail, treatment_date: date,
           amount: amt, payment_method: payment, pigment_used: pigment, remark, rating },
         staff?.id,
       )
       toast(t.form.saved)
+      setPickedCustomer('')
+      setServiceId('')
+      setDetail('')
+      setAmount('')
+      setPigment('')
+      setRemark('')
+      setRating(null)
       onSaved()
       onClose()
     } catch (e) {
@@ -75,6 +90,34 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
         </>
       }
     >
+      {!customerId && (
+        <FormRow label={t.treatments.customer} required error={errors.customer}>
+          <Input
+            value={customerQuery}
+            onChange={(e) => setCustomerQuery(e.target.value)}
+            placeholder={t.treatments.searchCustomer}
+            className="mb-2"
+          />
+          <Select
+            value={pickedCustomer}
+            onChange={(e) => setPickedCustomer(e.target.value)}
+            className="w-full"
+            size={6}
+          >
+            {(customers.data ?? [])
+              .filter((c) => {
+                const q = customerQuery.trim().toLowerCase()
+                return !q || c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q)
+              })
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.phone ? ` · ${c.phone}` : ''}
+                </option>
+              ))}
+          </Select>
+        </FormRow>
+      )}
+
       <div className="grid gap-x-4 sm:grid-cols-2">
         <FormRow label={t.form.service} required error={errors.service}>
           <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="w-full">

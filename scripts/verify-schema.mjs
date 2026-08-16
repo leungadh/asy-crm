@@ -218,6 +218,42 @@ await check('Deleting a customer cascades treatments, nodes and ledger rows',
      (select count(*) from followup_nodes where treatment_id='${newTx}')
    )::text result`, '0')
 
+// ── Stock take: the delta model the StockAdjustForm relies on ──────────────
+console.log('\n════ STOCK TAKE (mirrors StockAdjustForm) ════')
+
+const p1 = (await c.query(`select id from products where code='P1'`)).rows[0].id
+const before = (await c.query(`select studio_qty, home_qty, total_qty from v_stock_levels where code='P1'`)).rows[0]
+
+// Counting 7 at Studio when the ledger says 10 must store a delta of -3,
+// never an absolute overwrite.
+await c.query(`
+  insert into stock_movements (product_id, location, delta, reason, note, occurred_on)
+  values ('${p1}','studio', ${7 - before.studio_qty}, 'stock_take','count', current_date)`)
+await check('Stock take stores a delta, and Studio now reads the counted value',
+  `select studio_qty::text result from v_stock_levels where code='P1'`, '7')
+await check('...leaving Home untouched',
+  `select home_qty::text result from v_stock_levels where code='P1'`, String(before.home_qty))
+await check('...and Total recomputed from the movement ledger',
+  `select total_qty::text result from v_stock_levels where code='P1'`, String(7 + before.home_qty))
+
+await check('History is preserved rather than overwritten',
+  `select (count(*) > 1)::text result from stock_movements where product_id='${p1}' and location='studio'`, 'true')
+
+// Crossing a threshold must flip the badge the Stock page renders
+await c.query(`
+  insert into stock_movements (product_id, location, delta, reason, occurred_on)
+  values ('${p1}','studio', ${-(7 + before.home_qty) + 2}, 'stock_take', current_date)`)
+await check('Dropping to 2 flips the product to critical',
+  `select stock_status result from v_stock_levels where code='P1'`, 'critical')
+
+// ProductForm insert
+await c.query(`
+  insert into products (code, name_zh, category, unit, low_stock_threshold, critical_stock_threshold)
+  values ('TESTSKU','Test','保養產品','件',5,3)`)
+await check('A brand-new product appears with zero stock, flagged critical',
+  `select stock_status result from v_stock_levels where code='TESTSKU'`, 'critical')
+await c.query(`delete from products where code='TESTSKU'`)
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

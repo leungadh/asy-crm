@@ -140,3 +140,52 @@ export async function bookReview(args: {
   })
   if (error) throw new Error(error.message)
 }
+
+/** Stock is a movement ledger, so a stock take is recorded as the DIFFERENCE
+ *  between what was counted and what the ledger currently says — never as an
+ *  absolute overwrite. That preserves history and stays correct if two counts
+ *  race. A zero delta writes nothing (the column has a `delta <> 0` check). */
+export async function recordStockCount(args: {
+  product_id: string
+  location: StockLocation
+  currentQty: number
+  countedQty: number
+  reason: 'stock_take' | 'purchase_in' | 'sale_out' | 'adjustment'
+  note?: string
+  occurred_on: string
+}, staffId?: string) {
+  const delta = args.countedQty - args.currentQty
+  if (delta === 0) return { changed: false, delta }
+
+  const { error } = await supabase.from('stock_movements').insert({
+    product_id: args.product_id,
+    location: args.location,
+    delta,
+    reason: args.reason,
+    note: nz(args.note),
+    occurred_on: args.occurred_on,
+    created_by: staffId ?? null,
+  })
+  if (error) throw new Error(error.message)
+  return { changed: true, delta }
+}
+
+export interface ProductInput {
+  code: string
+  name_zh: string
+  category: string
+  unit: string
+  low_stock_threshold: number
+  critical_stock_threshold: number
+  note?: string
+}
+
+export async function saveProduct(input: ProductInput, id?: string) {
+  const row = { ...input, note: nz(input.note) }
+  const q = id
+    ? supabase.from('products').update(row).eq('id', id).select('id').single()
+    : supabase.from('products').insert(row).select('id').single()
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  return data.id as string
+}

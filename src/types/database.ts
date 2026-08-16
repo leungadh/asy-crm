@@ -130,3 +130,25 @@ export interface Product {
 
 export const PAYMENT_METHODS = ['FPS', 'Cash', 'PayMe', 'Bank Transfer', 'Card'] as const
 export const CUSTOMER_SOURCES = ['Instagram', '朋友介紹', '舊客介紹', '其他'] as const
+
+export interface StockLevel {
+  id: string
+  code: string
+  name_zh: string
+  category: string
+  unit: string
+  note: string | null
+  low_stock_threshold: number
+  critical_stock_threshold: number
+  studio_qty: number
+  home_qty: number
+  total_qty: number
+  stock_status: 'ok' | 'low' | 'critical'
+}
+
+export type MovementReason = 'stock_take' | 'purchase_in' | 'sale_out' | 'adjustment'
+
+export interface TreatmentRow extends Treatment {
+  customer: { id: string; name: string; phone: string | null }
+  service: { code: string; name_zh: string; name_en: string; accent: string }
+}
