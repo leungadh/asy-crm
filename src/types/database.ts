@@ -217,3 +217,46 @@ export interface CalendarEvent {
   label: string | null
   event_status: string
 }
+
+export interface MonthlyServiceRevenue {
+  month: string
+  service_id: string
+  code: string
+  name_zh: string
+  name_en: string
+  accent: string
+  treatment_count: number
+  revenue: string
+}
+
+export interface MonthlyCustomerStats {
+  month: string
+  treatment_customers: number
+  treatment_count: number
+  revenue: string
+  new_customers: number
+  returning_customers: number
+  repeat_rate: string
+  avg_ticket: string
+}
+
+export interface FollowupSummary {
+  done: number
+  outstanding: number
+  awaiting_reply: number
+  booked: number
+  not_due: number
+  total: number
+}
+
+export interface ReviewRate {
+  reviewed: number
+  total: number
+  rate: string
+}
+
+export interface CustomerSource {
+  source: string
+  customer_count: number
+  pct: string
+}

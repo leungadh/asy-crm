@@ -468,6 +468,72 @@ await check('Reverting to a booking removes the income row',
 
 await c.query(`delete from customers where id='${bcust}'`)
 
+// ── Reporting rollups ─────────────────────────────────────────────────────
+console.log('\n════ REPORTS ════')
+
+// The whole point of a rollup is that it agrees with the raw data.
+await check('Service revenue rollup reconciles with summed treatments',
+  `select (
+     (select coalesce(sum(revenue),0) from v_monthly_service_revenue)
+     = (select coalesce(sum(amount),0) from treatments where status <> 'scheduled')
+   )::text result`, 'true')
+
+await check('Customer stats rollup reconciles with the same total',
+  `select (
+     (select coalesce(sum(revenue),0) from v_monthly_customer_stats)
+     = (select coalesce(sum(amount),0) from treatments where status <> 'scheduled')
+   )::text result`, 'true')
+
+await check('No booking leaks into the service rollup',
+  `select count(*)::text result from v_monthly_service_revenue r
+     where not exists (
+       select 1 from treatments t
+       where date_trunc('month', t.treatment_date)::date = r.month
+         and t.service_id = r.service_id and t.status <> 'scheduled')`, '0')
+
+await check('New plus returning equals clients treated, every month',
+  `select count(*)::text result from v_monthly_customer_stats
+     where new_customers + returning_customers <> treatment_customers`, '0')
+
+await check('Returning is never negative',
+  `select count(*)::text result from v_monthly_customer_stats where returning_customers < 0`, '0')
+
+await check('Repeat rate stays within 0-100',
+  `select count(*)::text result from v_monthly_customer_stats
+     where repeat_rate < 0 or repeat_rate > 100`, '0')
+
+await check('A customer is new exactly once across all months',
+  `select (
+     (select coalesce(sum(new_customers),0) from v_monthly_customer_stats)
+     = (select count(distinct customer_id) from treatments where status <> 'scheduled')
+   )::text result`, 'true')
+
+await check('Average ticket equals revenue over treatment count',
+  `select count(*)::text result from v_monthly_customer_stats
+     where treatment_count > 0 and avg_ticket <> round(revenue / treatment_count, 0)`, '0')
+
+await check('Follow-up summary totals match the board',
+  `select (
+     (select total from v_followup_summary) = (select count(*) from v_followup_board)
+   )::text result`, 'true')
+
+await check('Review rate counts only review nodes',
+  `select (
+     (select total from v_review_rate)
+     = (select count(*) from followup_nodes where node_type = 'review')
+   )::text result`, 'true')
+
+const rpt = (await c.query(`
+  select to_char(month,'YYYY-MM') m, revenue, treatment_customers, new_customers,
+         returning_customers, repeat_rate, avg_ticket
+  from v_monthly_customer_stats order by month desc limit 3`)).rows
+console.log('   ↳ recent months:')
+for (const r of rpt) {
+  console.log(`      ${r.m}  revenue ${r.revenue}  clients ${r.treatment_customers} ` +
+              `(${r.new_customers} new / ${r.returning_customers} returning)  ` +
+              `repeat ${r.repeat_rate}%  avg ${r.avg_ticket}`)
+}
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

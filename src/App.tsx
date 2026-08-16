@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
 import { I18nProvider } from '@/i18n'
@@ -8,8 +9,11 @@ import CustomerList from '@/pages/CustomerList'
 import CustomerDetail from '@/pages/CustomerDetail'
 import Treatments from '@/pages/Treatments'
 import Stock from '@/pages/Stock'
-import Ledger from '@/pages/Ledger'
 import Calendar from '@/pages/Calendar'
+
+// Chart-heavy pages: recharts is only fetched when one is opened.
+const Ledger = lazy(() => import('@/pages/Ledger'))
+const Reports = lazy(() => import('@/pages/Reports'))
 import Placeholder from '@/pages/Placeholder'
 
 function Gate() {
@@ -20,6 +24,7 @@ function Gate() {
   if (!session || !staff) return <Login />
 
   return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner /></div>}>
     <Routes>
       <Route path="/" element={<Placeholder titleKey="dashboard" />} />
       <Route path="/customers" element={<CustomerList />} />
@@ -28,10 +33,11 @@ function Gate() {
       <Route path="/treatments" element={<Treatments />} />
       <Route path="/stock" element={<Stock />} />
       <Route path="/ledger" element={<Ledger />} />
-      <Route path="/reports" element={<Placeholder titleKey="reports" />} />
+      <Route path="/reports" element={<Reports />} />
       <Route path="/settings" element={<Placeholder titleKey="settings" />} />
       <Route path="*" element={<Navigate to="/customers" replace />} />
     </Routes>
+    </Suspense>
   )
 }
 
