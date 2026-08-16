@@ -1,0 +1,12 @@
+# Cloudflare Pages configuration.
+#
+# Secrets are NOT set here — they are configured in the Pages dashboard under
+# Settings > Environment variables, and marked as encrypted:
+#
+#   SUPABASE_URL                the production project URL
+#   SUPABASE_SERVICE_ROLE_KEY   server-side only, never in the repo
+#   ICS_TOKEN                   long random string guarding the calendar feed
+#
+name = "asy-crm"
+compatibility_date = "2026-08-16"
+pages_build_output_dir = "dist"
