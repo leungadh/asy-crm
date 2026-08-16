@@ -10,11 +10,11 @@ import { formatMoney, waLink } from '@/lib/utils'
 import { CustomerForm } from '@/components/forms/CustomerForm'
 import { TreatmentForm } from '@/components/forms/TreatmentForm'
 import { PurchaseForm } from '@/components/forms/PurchaseForm'
-import { NodeActions } from '@/components/forms/NodeActions'
+import { TreatmentHistory } from '@/components/TreatmentHistory'
 
 export default function CustomerDetail() {
   const { id } = useParams()
-  const { t, locale } = useI18n()
+  const { t } = useI18n()
   const { data, loading, error, refetch } = useCustomerDetail(id)
   const [editing, setEditing] = useState(false)
   const [addingTreatment, setAddingTreatment] = useState(false)
@@ -24,7 +24,6 @@ export default function CustomerDetail() {
   if (error || !data) return <AppShell title={t.common.error}><EmptyState>{error}</EmptyState></AppShell>
 
   const { customer: c, treatments, nodes, purchases } = data
-  const latest = treatments[0]
   const wa = waLink(c.phone)
 
   // Purchase totals, as the mockup's 累計購買總結 chips
@@ -158,75 +157,11 @@ export default function CustomerDetail() {
             </Card>
           )}
 
-          {latest && (
-            <Card>
-              <CardHeader title={t.detail.latestTreatment} />
-              <div className="divide-y divide-cream-200 px-5 py-1">
-                <Field label={t.detail.service}>
-                  {locale === 'en' ? latest.service.name_en : latest.service.name_zh}
-                  {latest.detail && <span className="ml-1 text-ink-500">· {latest.detail}</span>}
-                </Field>
-                <Field label={t.detail.date}>{latest.treatment_date}</Field>
-                <Field label={t.detail.pigment}>{latest.pigment_used ?? t.common.none}</Field>
-              </div>
-              {latest.remark && (
-                <div className="mx-5 mb-5 rounded-lg bg-cream-100 px-4 py-3">
-                  <p className="mb-1 text-xs text-ink-400">{t.detail.situation}</p>
-                  <p className="text-[13px] text-ink-600">{latest.remark}</p>
-                </div>
-              )}
-            </Card>
-          )}
         </div>
 
         {/* ── Right column ────────────────────────────────────────────── */}
         <div className="space-y-5">
-          <Card>
-            <CardHeader
-              title={t.detail.followupTimeline}
-            />
-            {nodes.length === 0 ? (
-              <EmptyState>{t.detail.noTreatments}</EmptyState>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-rose-50/60 text-left text-[13px] text-ink-500">
-                      <th className="px-5 py-2.5 font-medium">{t.detail.node}</th>
-                      <th className="px-4 py-2.5 font-medium">{t.detail.dueDate}</th>
-                      <th className="px-4 py-2.5 font-medium">{t.detail.nodeStatus}</th>
-                      <th className="hidden px-4 py-2.5 font-medium sm:table-cell">{t.detail.nodeNote}</th>
-                      <th className="px-4 py-2.5" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nodes.map((n) => (
-                      <tr key={n.id} className="border-t border-cream-200">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="size-1.5 shrink-0 rounded-full bg-[var(--accent-300)]" />
-                            <span className="text-ink-700">{locale === 'en' ? n.label_en : n.label_zh}</span>
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-ink-600">
-                          {n.window_end_date
-                            ? `${n.due_date} – ${n.window_end_date}`
-                            : n.due_date}
-                        </td>
-                        <td className="px-4 py-3"><NodeStatusBadge status={n.display_status} /></td>
-                        <td className="hidden px-4 py-3 text-[13px] text-ink-500 sm:table-cell">
-                          {n.note ?? t.common.none}
-                        </td>
-                        <td className="px-4 py-3">
-                          <NodeActions node={n} onChanged={refetch} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+          <TreatmentHistory treatments={treatments} nodes={nodes} onChanged={refetch} />
 
           <Card>
             <CardHeader

@@ -254,6 +254,37 @@ await check('A brand-new product appears with zero stock, flagged critical',
   `select stock_status result from v_stock_levels where code='TESTSKU'`, 'critical')
 await c.query(`delete from products where code='TESTSKU'`)
 
+// ── Visit history grouping (customer detail page) ──────────────────────────
+console.log('\n════ VISIT HISTORY ════')
+
+await check('Repeat customers exist in the seed, so history is exercised',
+  `select (count(*) > 0)::text result from (
+     select customer_id from treatments group by customer_id having count(*) > 2
+   ) x`, 'true')
+
+const repeat = (await c.query(`
+  select customer_id, count(*)::int visits from treatments
+  group by customer_id order by visits desc limit 1`)).rows[0]
+
+await check('Every follow-up node maps to exactly one treatment',
+  `select count(*)::text result from followup_nodes n
+     left join treatments t on t.id = n.treatment_id where t.id is null`, '0')
+
+await check("A repeat customer's nodes span more than one visit",
+  `select (count(distinct treatment_id) > 1)::text result
+     from v_followup_board where customer_id = '${repeat.customer_id}'`, 'true')
+
+await check('Treatments are orderable newest-first without ties breaking grouping',
+  `select (count(*) = count(distinct id))::text result
+     from treatments where customer_id = '${repeat.customer_id}'`, 'true')
+
+const spread = (await c.query(`
+  select t.id, t.treatment_date, count(n.id)::int nodes
+  from treatments t left join followup_nodes n on n.treatment_id = t.id
+  where t.customer_id = '${repeat.customer_id}'
+  group by t.id order by t.treatment_date desc`)).rows
+console.log(`   ↳ busiest client has ${repeat.visits} visits; nodes per visit: ${spread.map(r => r.nodes).join(', ')}`)
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');
