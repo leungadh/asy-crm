@@ -200,3 +200,17 @@ export interface MonthlyLedger {
   net: string
   entry_count: number
 }
+
+export interface CalendarEvent {
+  id: string
+  source: 'appointment' | 'followup' | 'review_window'
+  event_type: 'treatment' | 'review' | 'follow_up'
+  event_at: string
+  duration_minutes: number
+  customer_id: string
+  customer_name: string
+  customer_phone: string | null
+  service_name: string | null
+  label: string | null
+  event_status: string
+}

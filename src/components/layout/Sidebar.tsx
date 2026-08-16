@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { Brand } from './Brand'
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n()
@@ -22,9 +23,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-cream-200 bg-cream-100">
-      <div className="safe-top px-6 pb-6 pt-7 text-center">
-        <p className="text-[17px] font-semibold tracking-[0.18em] text-ink-900">{t.brand.name}</p>
-        <p className="mt-1 text-[10px] tracking-[0.28em] text-ink-400">{t.brand.sub}</p>
+      <div className="safe-top px-6 pb-6 pt-7">
+        <Brand />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">

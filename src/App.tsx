@@ -9,6 +9,7 @@ import CustomerDetail from '@/pages/CustomerDetail'
 import Treatments from '@/pages/Treatments'
 import Stock from '@/pages/Stock'
 import Ledger from '@/pages/Ledger'
+import Calendar from '@/pages/Calendar'
 import Placeholder from '@/pages/Placeholder'
 
 function Gate() {
@@ -23,7 +24,7 @@ function Gate() {
       <Route path="/" element={<Placeholder titleKey="dashboard" />} />
       <Route path="/customers" element={<CustomerList />} />
       <Route path="/customers/:id" element={<CustomerDetail />} />
-      <Route path="/calendar" element={<Placeholder titleKey="calendar" />} />
+      <Route path="/calendar" element={<Calendar />} />
       <Route path="/treatments" element={<Treatments />} />
       <Route path="/stock" element={<Stock />} />
       <Route path="/ledger" element={<Ledger />} />

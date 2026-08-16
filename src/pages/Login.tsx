@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '@/i18n'
 import { Button, Card, Input } from '@/components/ui'
+import { Brand } from '@/components/layout/Brand'
 
 export default function Login() {
   const { t } = useI18n()
@@ -21,10 +22,7 @@ export default function Login() {
   return (
     <div className="flex min-h-full items-center justify-center bg-cream-100 px-6">
       <Card className="w-full max-w-sm px-7 py-8">
-        <div className="mb-7 text-center">
-          <h1 className="text-xl font-semibold tracking-[0.2em] text-ink-900">{t.brand.name}</h1>
-          <p className="mt-1 text-[11px] tracking-[0.25em] text-ink-400">{t.brand.sub}</p>
-        </div>
+        <Brand size="lg" className="mb-7" />
 
         {state === 'sent' ? (
           <p className="rounded-lg bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-700">

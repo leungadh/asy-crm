@@ -1,5 +1,5 @@
 export const zhHK = {
-  brand: { name: 'ASY BEAUTE', sub: 'PMU STUDIO',
+  brand: { name: 'ASY BEAUTE',
     motto: '用心對待每一位客人，讓美麗與專業同行。' },
 
   nav: {
@@ -268,6 +268,37 @@ export const zhHK = {
     confirmDelete: '確定刪除這筆記錄？',
     deleted: '已刪除',
     total: '總計',
+  },
+
+  calendar: {
+    title: '日曆 / 跟進日程',
+    today: '今天',
+    month: '月曆',
+    list: '列表',
+    show: '顯示',
+    all: '全部',
+    treatment: '療程預約',
+    followUp: 'Follow-up',
+    review: '回診',
+    overdue: '逾期未跟',
+    done: '已完成',
+    todayPanel: '今日',
+    appointments: '預約',
+    followUps: '待跟進',
+    reviews: '回診',
+    overduePanel: '逾期未跟進',
+    next7: '未來 7 日行程',
+    viewAll: '查看全部',
+    nothingToday: '今日沒有安排',
+    nothingOverdue: '沒有逾期項目',
+    nothingUpcoming: '未來 7 日沒有安排',
+    time: '時間',
+    customer: '客人',
+    type: '類型',
+    item: '療程 / 項目',
+    daysLate: '已逾期 {n} 日',
+    weekdays: ['一', '二', '三', '四', '五', '六', '日'] as string[],
+    more: '再 {n} 項',
   },
 
   common: {

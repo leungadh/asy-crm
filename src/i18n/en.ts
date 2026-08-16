@@ -1,7 +1,7 @@
 import type { Dictionary } from './zh-HK'
 
 export const en: Dictionary = {
-  brand: { name: 'ASY BEAUTE', sub: 'PMU STUDIO',
+  brand: { name: 'ASY BEAUTE',
     motto: 'Every client, cared for. Beauty and professionalism, together.' },
 
   nav: {
@@ -270,6 +270,37 @@ export const en: Dictionary = {
     confirmDelete: 'Delete this record?',
     deleted: 'Deleted',
     total: 'Total',
+  },
+
+  calendar: {
+    title: 'Calendar / Follow-ups',
+    today: 'Today',
+    month: 'Month',
+    list: 'List',
+    show: 'Show',
+    all: 'All',
+    treatment: 'Treatment',
+    followUp: 'Follow-up',
+    review: 'Review',
+    overdue: 'Overdue',
+    done: 'Done',
+    todayPanel: 'Today',
+    appointments: 'Appointments',
+    followUps: 'Follow-ups due',
+    reviews: 'Reviews',
+    overduePanel: 'Overdue follow-ups',
+    next7: 'Next 7 days',
+    viewAll: 'View all',
+    nothingToday: 'Nothing scheduled today',
+    nothingOverdue: 'Nothing overdue',
+    nothingUpcoming: 'Nothing in the next 7 days',
+    time: 'Time',
+    customer: 'Customer',
+    type: 'Type',
+    item: 'Service / item',
+    daysLate: '{n} days late',
+    weekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    more: '{n} more',
   },
 
   common: {

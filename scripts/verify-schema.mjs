@@ -368,6 +368,32 @@ await check('Rollup income matches summing entries for that month',
      = (select coalesce(income,0) from v_monthly_ledger where month = date '2026-03-01')
    )::text result`, 'true')
 
+// ── Calendar ──────────────────────────────────────────────────────────────
+console.log('\n════ CALENDAR ════')
+
+await check('v_calendar_events unions all three sources',
+  `select count(distinct source)::text result from v_calendar_events`, '3')
+await check('Every event carries a customer to link through to',
+  `select count(*)::text result from v_calendar_events where customer_id is null`, '0')
+await check('Appointments have a real duration; follow-ups do not',
+  `select count(*)::text result from v_calendar_events
+     where (source = 'appointment' and duration_minutes <= 0)
+        or (source <> 'appointment' and duration_minutes <> 0)`, '0')
+await check('Completed and skipped nodes are excluded from the calendar',
+  `select count(*)::text result from v_calendar_events
+     where source <> 'appointment' and event_status in ('done','skipped')`, '0')
+await check('Booked reviews drop out of the review-window source',
+  `select count(*)::text result from v_calendar_events
+     where source = 'review_window' and event_status = 'booked'`, '0')
+
+const calSpread = (await c.query(`
+  select source, count(*)::int n from v_calendar_events group by source order by n desc`)).rows
+console.log('   ↳ ' + calSpread.map(r => `${r.source}: ${r.n}`).join(', '))
+
+const overdueN = (await c.query(`
+  select count(*)::int n from v_calendar_events where event_status = 'overdue'`)).rows[0].n
+console.log(`   ↳ overdue events surfaced in the right rail: ${overdueN}`)
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');
