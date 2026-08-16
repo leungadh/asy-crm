@@ -14,12 +14,20 @@ const typeTone: Record<string, BadgeTone> = {
   treatment: 'rose', follow_up: 'violet', review: 'amber',
 }
 
+/** Compact chair time for the narrow month cells: 90 -> 1.5h, 45 -> 45m. */
+function shortDuration(minutes: number): string {
+  if (minutes <= 0) return ''
+  if (minutes < 60) return `${minutes}m`
+  const h = minutes / 60
+  return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`
+}
+
 /** End time, so the grid shows chair time rather than just arrival. */
 function timeRange(iso: string, minutes: number): string {
-  const start = new Date(iso)
-  const end = new Date(start.getTime() + minutes * 60_000)
   const f = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  return minutes > 0 ? `${f(start)}–${f(end)}` : f(start)
+  const start = new Date(iso)
+  if (minutes <= 0) return f(start)
+  return `${f(start)}–${f(new Date(start.getTime() + minutes * 60_000))}`
 }
 
 /** Overdue is a status, not a type, so it wins over the type colour. */
@@ -36,9 +44,6 @@ const dotClass: Record<BadgeTone, string> = {
   red: 'bg-red-500', emerald: 'bg-emerald-500', pink: 'bg-pink-400',
   sky: 'bg-sky-400', slate: 'bg-slate-400',
 }
-
-const hhmm = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
 const monthOf = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -162,7 +167,7 @@ export default function Calendar() {
                     const isToday = day === today
                     return (
                       <div key={day}
-                           className={cn('min-h-24 rounded-lg border p-1.5',
+                           className={cn('min-h-28 rounded-lg border p-1.5',
                              inMonth ? 'border-cream-200 bg-white' : 'border-transparent bg-cream-50/50',
                              isToday && 'ring-2 ring-[var(--accent-300)]')}>
                         <div className="mb-1 flex justify-end">
@@ -174,20 +179,40 @@ export default function Calendar() {
                         </div>
 
                         <div className="space-y-0.5">
-                          {dayEvents.slice(0, 3).map((e) => (
-                            <Link key={e.id + e.source} to={`/customers/${e.customer_id}`}
-                                  className={cn('block truncate rounded px-1 py-0.5 text-[11px] leading-tight hover:opacity-80',
-                                    tone(e) === 'red' ? 'bg-red-50 text-red-700'
-                                      : tone(e) === 'emerald' ? 'bg-emerald-50 text-emerald-700'
-                                      : tone(e) === 'violet' ? 'bg-violet-50 text-violet-700'
-                                      : tone(e) === 'amber' ? 'bg-amber-50 text-amber-700'
-                                      : 'bg-rose-50 text-rose-700')}>
-                              {e.duration_minutes > 0 && (
-                                <span className="mr-1 font-medium">{hhmm(e.event_at)}</span>
-                              )}
-                              {e.customer_name}
-                            </Link>
-                          ))}
+                          {dayEvents.slice(0, 3).map((e) => {
+                            const timed = e.duration_minutes > 0
+                            return (
+                              <Link
+                                key={e.id + e.source}
+                                to={`/customers/${e.customer_id}`}
+                                title={[
+                                  timed ? timeRange(e.event_at, e.duration_minutes) : null,
+                                  e.customer_name,
+                                  e.service_name,
+                                  e.label,
+                                ].filter(Boolean).join(' · ')}
+                                className={cn('block rounded px-1 py-0.5 text-[11px] leading-tight hover:opacity-80',
+                                  tone(e) === 'red' ? 'bg-red-50 text-red-700'
+                                    : tone(e) === 'emerald' ? 'bg-emerald-50 text-emerald-700'
+                                    : tone(e) === 'violet' ? 'bg-violet-50 text-violet-700'
+                                    : tone(e) === 'amber' ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-rose-50 text-rose-700')}
+                              >
+                                {/* Anything occupying chair time shows the full range on
+                                    its own line; the start alone does not tell Yoyo
+                                    whether the day is bookable. */}
+                                {timed && (
+                                  <span className="block truncate font-medium">
+                                    {timeRange(e.event_at, e.duration_minutes)}
+                                    <span className="ml-1 font-normal opacity-60">
+                                      {shortDuration(e.duration_minutes)}
+                                    </span>
+                                  </span>
+                                )}
+                                <span className="block truncate">{e.customer_name}</span>
+                              </Link>
+                            )
+                          })}
                           {dayEvents.length > 3 && (
                             <p className="px-1 text-[10px] text-ink-400">
                               {t.calendar.more.replace('{n}', String(dayEvents.length - 3))}
