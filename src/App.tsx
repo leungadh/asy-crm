@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
+import { PreferencesProvider } from '@/hooks/usePreferences'
 import { I18nProvider } from '@/i18n'
 import { ToastProvider } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui'
@@ -10,6 +11,7 @@ import CustomerDetail from '@/pages/CustomerDetail'
 import Treatments from '@/pages/Treatments'
 import Stock from '@/pages/Stock'
 import Calendar from '@/pages/Calendar'
+import Settings from '@/pages/Settings'
 
 // Chart-heavy pages: recharts is only fetched when one is opened.
 const Ledger = lazy(() => import('@/pages/Ledger'))
@@ -34,7 +36,7 @@ function Gate() {
       <Route path="/stock" element={<Stock />} />
       <Route path="/ledger" element={<Ledger />} />
       <Route path="/reports" element={<Reports />} />
-      <Route path="/settings" element={<Placeholder titleKey="settings" />} />
+      <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<Navigate to="/customers" replace />} />
     </Routes>
     </Suspense>
@@ -46,9 +48,11 @@ export default function App() {
     <I18nProvider>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <Gate />
-          </BrowserRouter>
+          <PreferencesProvider>
+            <BrowserRouter>
+              <Gate />
+            </BrowserRouter>
+          </PreferencesProvider>
         </AuthProvider>
       </ToastProvider>
     </I18nProvider>

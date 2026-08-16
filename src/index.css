@@ -46,6 +46,11 @@
   --accent-500: #5f9c76; --accent-600: #4a7d5e;
 }
 
+/* Corner radius, driven from 設定 */
+[data-radius="sharp"]  { --radius-card: 0.25rem; }
+[data-radius="medium"] { --radius-card: 0.875rem; }
+[data-radius="round"]  { --radius-card: 1.25rem; }
+
 /* Density + corner radius, also driven from 設定 */
 [data-density="compact"]   { --row-py: 0.5rem; }
 [data-density="comfortable"]{ --row-py: 0.875rem; }

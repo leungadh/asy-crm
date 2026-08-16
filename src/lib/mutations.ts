@@ -322,3 +322,43 @@ export async function cancelBooking(id: string) {
     .from('treatments').delete().eq('id', id).eq('status', 'scheduled')
   if (error) throw new Error(error.message)
 }
+
+export async function saveAppSetting(key: string, value: number) {
+  // app_settings.value is jsonb; a bare JSON number is valid jsonb.
+  const { error } = await supabase.from('app_settings').update({ value }).eq('key', key)
+  if (error) throw new Error(error.message)
+}
+
+export async function createLedgerCategory(input: {
+  direction: 'income' | 'expense'
+  name_zh: string
+  name_en: string
+}) {
+  const { error } = await supabase.from('ledger_categories').insert({
+    direction: input.direction,
+    name_zh: input.name_zh.trim(),
+    name_en: (input.name_en.trim() || input.name_zh.trim()),
+    sort_order: 99,
+  })
+  if (error) throw new Error(error.message)
+}
+
+/** Renames the category AND its historical ledger rows in one transaction.
+ *  ledger_entries stores the category name as text, so renaming the row alone
+ *  would leave old entries pointing at a name that no longer exists. */
+export async function renameLedgerCategory(id: string, nameZh: string, nameEn: string) {
+  const { error } = await supabase.rpc('rename_ledger_category', {
+    p_id: id,
+    p_new_name_zh: nameZh,
+    p_new_name_en: nameEn,
+  })
+  if (error) throw new Error(error.message)
+}
+
+/** Hide rather than delete: historical entries keep referring to the name. */
+export async function setLedgerCategoryActive(id: string, isActive: boolean) {
+  const { error } = await supabase
+    .from('ledger_categories').update({ is_active: isActive })
+    .eq('id', id).eq('is_system', false)
+  if (error) throw new Error(error.message)
+}

@@ -534,6 +534,67 @@ for (const r of rpt) {
               `repeat ${r.repeat_rate}%  avg ${r.avg_ticket}`)
 }
 
+// ── Settings page writes ──────────────────────────────────────────────────
+console.log('\n════ SETTINGS ════')
+
+// app_settings.value is jsonb; the UI writes a bare number.
+await c.query(`update app_settings set value = '120'::jsonb where key = 'dormant_after_days'`)
+await check('A tunable round-trips as a number',
+  `select (value #>> '{}')::int::text result from app_settings where key = 'dormant_after_days'`, '120')
+await check('...and the change actually reaches v_customer_summary',
+  `select (select (value #>> '{}')::int from app_settings where key='dormant_after_days')::text result`, '120')
+await c.query(`update app_settings set value = '90'::jsonb where key = 'dormant_after_days'`)
+
+// Renaming must carry historical ledger rows with it, or the donut splits.
+const rentCat = (await c.query(`select id from ledger_categories where name_zh = '營運費用'`)).rows[0].id
+const rentBefore = (await c.query(
+  `select count(*)::int n from ledger_entries where category = '營運費用'`)).rows[0].n
+console.log(`   ↳ ${rentBefore} historical rows use 營運費用`)
+
+await c.query(`select rename_ledger_category('${rentCat}', '場地及營運', 'Operating')`)
+await check('Rename updates the category row',
+  `select name_zh result from ledger_categories where id = '${rentCat}'`, '場地及營運')
+await check('Rename carries historical ledger rows with it',
+  `select count(*)::text result from ledger_entries where category = '場地及營運'`, String(rentBefore))
+await check('...leaving nothing behind under the old name',
+  `select count(*)::text result from ledger_entries where category = '營運費用'`, '0')
+
+// System categories are written by triggers as literals and must not move.
+const sysCat = (await c.query(`select id from ledger_categories where is_system limit 1`)).rows[0].id
+let blocked = false
+try { await c.query(`select rename_ledger_category('${sysCat}', 'Broken', 'Broken')`) }
+catch (e) { blocked = /system category/i.test(e.message) }
+console.log(`${blocked ? '✅' : '❌'} Renaming a system category is refused`)
+if (!blocked) process.exitCode = 1
+
+let emptyBlocked = false
+try { await c.query(`select rename_ledger_category('${rentCat}', '  ', '')`) }
+catch (e) { emptyBlocked = /empty/i.test(e.message) }
+console.log(`${emptyBlocked ? '✅' : '❌'} An empty category name is refused`)
+if (!emptyBlocked) process.exitCode = 1
+
+// Hiding keeps history intact; the ledger form filters on is_active.
+await c.query(`update ledger_categories set is_active = false where id = '${rentCat}'`)
+await check('Hiding a category leaves its historical rows alone',
+  `select count(*)::text result from ledger_entries where category = '場地及營運'`, String(rentBefore))
+await check('...and it disappears from the active list the form reads',
+  `select count(*)::text result from ledger_categories where id='${rentCat}' and is_active`, '0')
+
+// Every staff member can have preferences without a migration.
+const st = (await c.query(`select id from staff limit 1`)).rows[0].id
+await c.query(`insert into user_preferences (staff_id, theme, density, font_scale)
+               values ('${st}', 'sage', 'compact', 1.15)
+               on conflict (staff_id) do update set theme='sage', density='compact', font_scale=1.15`)
+await check('Preferences persist per staff member',
+  `select theme || '/' || density || '/' || font_scale result from user_preferences where staff_id='${st}'`,
+  'sage/compact/1.15')
+
+let badTheme = false
+try { await c.query(`update user_preferences set theme = 'neon' where staff_id='${st}'`) }
+catch { badTheme = true }
+console.log(`${badTheme ? '✅' : '❌'} An unknown theme is rejected by the check constraint`)
+if (!badTheme) process.exitCode = 1
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

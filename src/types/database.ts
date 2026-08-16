@@ -260,3 +260,17 @@ export interface CustomerSource {
   customer_count: number
   pct: string
 }
+
+export interface UserPreferences {
+  staff_id: string
+  locale: 'zh-HK' | 'en'
+  theme: 'blue' | 'rose' | 'sage'
+  density: 'compact' | 'comfortable' | 'spacious'
+  corner_radius: 'sharp' | 'medium' | 'round'
+  font_scale: string
+}
+
+export interface AppSetting {
+  key: string
+  value: unknown
+}
