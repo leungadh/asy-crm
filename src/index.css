@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* ─── Theme tokens ─────────────────────────────────────────────────────────
+   Palette lifted from the design mockups: warm cream sidebar, rose accent,
+   soft pink table headers. Exposed as CSS variables so the 設定 page can
+   swap palettes (blue / rose / sage) without touching component code.       */
+@theme {
+  --font-sans: "Inter", "PingFang HK", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+
+  --color-cream-50:  #fdfaf9;
+  --color-cream-100: #faf3f1;
+  --color-cream-200: #f5e9e6;
+
+  --color-rose-50:  #fdf2f4;
+  --color-rose-100: #fce7ea;
+  --color-rose-200: #f9d0d8;
+  --color-rose-300: #f4a9b8;
+  --color-rose-400: #ec7591;
+  --color-rose-500: #e14d70;
+  --color-rose-600: #cd2f57;
+  --color-rose-700: #ac2148;
+
+  --color-ink-400: #9c9490;
+  --color-ink-500: #6f6663;
+  --color-ink-600: #514845;
+  --color-ink-700: #3a3230;
+  --color-ink-900: #221c1b;
+
+  --radius-card: 0.875rem;
+}
+
+/* Palette switching: the 設定 page sets data-theme on <html>. */
+:root {
+  --accent-50:  var(--color-rose-50);
+  --accent-100: var(--color-rose-100);
+  --accent-300: var(--color-rose-300);
+  --accent-500: var(--color-rose-500);
+  --accent-600: var(--color-rose-600);
+}
+[data-theme="blue"] {
+  --accent-50: #eff6ff; --accent-100: #dbeafe; --accent-300: #93c5fd;
+  --accent-500: #3b82f6; --accent-600: #2563eb;
+}
+[data-theme="sage"] {
+  --accent-50: #f1f7f3; --accent-100: #dcece1; --accent-300: #a3ccb0;
+  --accent-500: #5f9c76; --accent-600: #4a7d5e;
+}
+
+/* Density + corner radius, also driven from 設定 */
+[data-density="compact"]   { --row-py: 0.5rem; }
+[data-density="comfortable"]{ --row-py: 0.875rem; }
+[data-density="spacious"]  { --row-py: 1.25rem; }
+:root { --row-py: 0.875rem; }
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-cream-50);
+  color: var(--color-ink-700);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-size: calc(1rem * var(--font-scale, 1));
+}
+
+/* Respect the iPhone notch when installed as a PWA */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
