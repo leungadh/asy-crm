@@ -1,0 +1,9 @@
+# Single-page app fallback.
+#
+# Without this, opening or refreshing a deep link like /customers/<id> asks
+# Cloudflare for a file that does not exist and returns 404. Serving index.html
+# with a 200 lets React Router handle the path.
+#
+# Pages Functions are matched BEFORE static assets and redirects, so
+# /calendar/<token>.ics still reaches functions/calendar/[token].ts.
+/*    /index.html   200
