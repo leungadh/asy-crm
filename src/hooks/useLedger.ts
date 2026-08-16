@@ -51,18 +51,31 @@ export function useLedger(month: string) {
 
 export function useLedgerCategories() {
   const [rows, setRows] = useState<LedgerCategory[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     supabase.from('ledger_categories').select('*')
       .eq('is_active', true).order('direction').order('sort_order')
-      .then(({ data }) => setRows((data ?? []) as LedgerCategory[]))
+      .then(({ data, error }) => {
+        if (cancelled) return
+        // Discarding this error made a missing table, an RLS denial and an
+        // empty list all look identical: a silently empty dropdown.
+        setRows((data ?? []) as LedgerCategory[])
+        setError(error?.message ?? null)
+        setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   return useMemo(() => ({
     all: rows,
     income: rows.filter((r) => r.direction === 'income'),
     expense: rows.filter((r) => r.direction === 'expense'),
-  }), [rows])
+    error,
+    loading,
+  }), [rows, error, loading])
 }
 
 /** Months present in the data, newest first, for the month picker. */

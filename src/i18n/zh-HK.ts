@@ -157,6 +157,8 @@ export const zhHK = {
     saving: '儲存中…',
     saved: '已儲存',
     saveFailed: '儲存失敗',
+    categoriesUnavailable: '無法載入分類',
+    categoriesHint: '資料庫可能未套用最新 migration。請執行 supabase db push。',
     selectPlaceholder: '請選擇…',
     autoFollowupNote: '儲存後會自動產生跟進時間表',
     autoIncomeNote: '會自動建立一筆療程收入記錄',

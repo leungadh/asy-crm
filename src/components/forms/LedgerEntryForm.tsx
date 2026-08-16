@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { FormRow, Textarea } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
+import { AlertCircle } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
 import { useAuth } from '@/hooks/useAuth'
@@ -39,6 +40,9 @@ export function LedgerEntryForm({ open, onClose, onSaved, existing, defaultMonth
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const options = direction === 'income' ? categories.income : categories.expense
+  // A dropdown with nothing in it is indistinguishable from a broken one, so
+  // say which it is rather than letting the user fight an empty <select>.
+  const categoriesBroken = !categories.loading && (categories.error !== null || categories.all.length === 0)
 
   async function submit() {
     const next: Record<string, string> = {}
@@ -75,12 +79,23 @@ export function LedgerEntryForm({ open, onClose, onSaved, existing, defaultMonth
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>{t.common.cancel}</Button>
-          <Button variant="primary" onClick={submit} disabled={saving}>
+          <Button variant="primary" onClick={submit} disabled={saving || categoriesBroken}>
             {saving ? t.form.saving : t.common.save}
           </Button>
         </>
       }
     >
+      {categoriesBroken && (
+        <div className="mb-4 flex gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            <strong>{t.form.categoriesUnavailable}</strong>
+            <br />
+            {categories.error ?? t.form.categoriesHint}
+          </span>
+        </div>
+      )}
+
       <FormRow label={t.ledger.type} required>
         <div className="flex gap-2">
           {(['income', 'expense'] as const).map((d) => (
@@ -109,8 +124,11 @@ export function LedgerEntryForm({ open, onClose, onSaved, existing, defaultMonth
         </FormRow>
 
         <FormRow label={t.ledger.category} required error={errors.category}>
-          <Select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full">
-            <option value="">{t.form.selectPlaceholder}</option>
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}
+                  className="w-full" disabled={categoriesBroken}>
+            <option value="">
+              {categoriesBroken ? t.form.categoriesUnavailable : t.form.selectPlaceholder}
+            </option>
             {options.map((c) => (
               <option key={c.id} value={c.name_zh}>
                 {locale === 'en' ? c.name_en : c.name_zh}

@@ -159,6 +159,8 @@ export const en: Dictionary = {
     saving: 'Saving…',
     saved: 'Saved',
     saveFailed: 'Save failed',
+    categoriesUnavailable: 'Could not load categories',
+    categoriesHint: 'The database may be missing the latest migration. Run: supabase db push',
     selectPlaceholder: 'Select…',
     autoFollowupNote: 'A follow-up timeline will be generated automatically',
     autoIncomeNote: 'An income record will be created automatically',

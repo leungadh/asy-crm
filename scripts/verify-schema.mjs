@@ -137,7 +137,16 @@ await c.query(`select set_config('request.jwt.claim.sub','11111111-1111-1111-111
 const staffRows = (await c.query('select count(*)::int n from customers')).rows[0].n;
 await c.query(`select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false)`);
 const strangerRows = (await c.query('select count(*)::int n from customers')).rows[0].n;
+// The exact query the 分類 dropdown issues. An empty result here is precisely
+// what the user experienced as "cannot create a record".
+// NB: switch the claim back to Yoyo first — the stranger check above left it
+// pointing at the non-allowlisted account.
+await c.query(`select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false)`);
+const catRows = (await c.query(
+  `select count(*)::int n from ledger_categories where is_active`)).rows[0].n;
 await c.query(`reset role`);
+console.log(`${catRows === 7 ? '✅' : '❌'} Category dropdown query returns ${catRows} rows as an allowlisted user`);
+if (catRows !== 7) process.exitCode = 1;
 console.log(`${staffRows > 0 ? '✅' : '❌'} Allowlisted user (Yoyo) sees ${staffRows} customers`);
 console.log(`${strangerRows === 0 ? '✅' : '❌'} Non-allowlisted user sees ${strangerRows} customers`);
 if (staffRows === 0 || strangerRows !== 0) process.exitCode = 1;
