@@ -7,7 +7,6 @@ export const zhHK = {
     customers: '客人列表',
     calendar: '日曆 / 跟進日程',
     treatments: '療程記錄',
-    reviews: '回診預約',
     stock: '存貨管理',
     ledger: '收入支出',
     reports: '統計報表',

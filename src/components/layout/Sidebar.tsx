@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList,
-  CalendarCheck, Package, CircleDollarSign, BarChart3, Settings,
+  Package, CircleDollarSign, BarChart3, Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -14,7 +14,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     { to: '/customers',  icon: Users,             label: t.nav.customers },
     { to: '/calendar',   icon: CalendarDays,      label: t.nav.calendar },
     { to: '/treatments', icon: ClipboardList,     label: t.nav.treatments },
-    { to: '/reviews',    icon: CalendarCheck,     label: t.nav.reviews },
     { to: '/stock',      icon: Package,           label: t.nav.stock },
     { to: '/ledger',     icon: CircleDollarSign,  label: t.nav.ledger },
     { to: '/reports',    icon: BarChart3,         label: t.nav.reports },

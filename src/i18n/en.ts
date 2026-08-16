@@ -9,7 +9,6 @@ export const en: Dictionary = {
     customers: 'Customers',
     calendar: 'Calendar / Follow-ups',
     treatments: 'Treatment Records',
-    reviews: 'Review Bookings',
     stock: 'Stock Take',
     ledger: 'Income & Expense',
     reports: 'Reports',

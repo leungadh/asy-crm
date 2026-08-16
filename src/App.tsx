@@ -25,7 +25,6 @@ function Gate() {
       <Route path="/customers/:id" element={<CustomerDetail />} />
       <Route path="/calendar" element={<Placeholder titleKey="calendar" />} />
       <Route path="/treatments" element={<Treatments />} />
-      <Route path="/reviews" element={<Placeholder titleKey="reviews" />} />
       <Route path="/stock" element={<Stock />} />
       <Route path="/ledger" element={<Ledger />} />
       <Route path="/reports" element={<Placeholder titleKey="reports" />} />
