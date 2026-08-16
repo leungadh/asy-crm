@@ -100,7 +100,6 @@ export default function Stock() {
                   </th>
                   <th className="px-4 py-3 text-right font-medium">{t.stock.total}</th>
                   <th className="px-4 py-3 font-medium">{t.stock.statusLabel}</th>
-                  <th className="hidden px-4 py-3 font-medium lg:table-cell">{t.stock.productNote}</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -133,9 +132,6 @@ export default function Stock() {
                     <td className="px-4">
                       <Badge tone={statusTone[p.stock_status]}>{t.stock[p.stock_status]}</Badge>
                     </td>
-                    <td className="hidden px-4 text-[13px] text-ink-500 lg:table-cell">
-                      {p.note ?? t.common.none}
-                    </td>
                     <td className="px-4">
                       <div className="flex justify-end gap-1">
                         <Button size="sm" onClick={() => setAdjusting(p)}>{t.stock.adjust}</Button>
@@ -148,7 +144,7 @@ export default function Stock() {
 
                   {isOpen && (
                     <tr className="border-t border-cream-200 bg-cream-50/60">
-                      <td colSpan={9} className="px-4 py-4">
+                      <td colSpan={8} className="px-4 py-4">
                         <p className="mb-2 text-xs font-medium text-ink-500">
                           {t.stock.history}
                           <span className="ml-2 font-normal text-ink-400">{t.stock.historyHint}</span>
@@ -180,9 +176,6 @@ export default function Stock() {
                                           : m.reason === 'sale_out' ? t.stock.reasonSaleOut
                                           : t.stock.reasonAdjustment}
                                       </Badge>
-                                    </td>
-                                    <td className="px-3 py-2 text-[13px] text-ink-600">
-                                      {m.note || <span className="text-ink-400">{t.common.none}</span>}
                                     </td>
                                     <td className="whitespace-nowrap py-2 pl-3 pr-4 text-right text-xs text-ink-400">
                                       {m.staff?.display_name ? `${t.stock.by} ${m.staff.display_name}` : ''}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Info } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
-import { FormRow, Textarea } from '@/components/ui/form'
+import { FormRow } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
 import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
@@ -38,7 +38,6 @@ export function StockAdjustForm({ product, onClose, onSaved }: {
     home: String(product.home_qty),
   })
   const [reason, setReason] = useState<MovementReason>('stock_take')
-  const [note, setNote] = useState('')
   const [date, setDate] = useState(today())
   const [saving, setSaving] = useState(false)
 
@@ -73,7 +72,6 @@ export function StockAdjustForm({ product, onClose, onSaved }: {
           currentQty: current[loc],
           countedQty: Number(counted[loc]),
           reason,
-          note,
           occurred_on: date,
         }, staff?.id)
       }
@@ -159,10 +157,6 @@ export function StockAdjustForm({ product, onClose, onSaved }: {
         </FormRow>
       </div>
 
-      <FormRow label={t.stock.note}>
-        <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-      </FormRow>
-
       <div className="flex gap-2 rounded-lg bg-cream-100 px-3 py-2.5 text-xs text-ink-500">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>{t.stock.manualNote}</span>
@@ -188,7 +182,6 @@ export function ProductForm({ existing, onClose, onSaved }: {
     unit: existing?.unit ?? '件',
     low_stock_threshold: existing?.low_stock_threshold ?? 5,
     critical_stock_threshold: existing?.critical_stock_threshold ?? 3,
-    note: existing?.note ?? '',
   })
 
   const set = <K extends keyof ProductInput>(k: K, v: ProductInput[K]) =>
@@ -247,9 +240,6 @@ export function ProductForm({ existing, onClose, onSaved }: {
                  onChange={(e) => set('critical_stock_threshold', Number(e.target.value) || 0)} />
         </FormRow>
       </div>
-      <FormRow label={t.stock.note}>
-        <Textarea value={form.note} onChange={(e) => set('note', e.target.value)} rows={2} />
-      </FormRow>
     </Modal>
   )
 }

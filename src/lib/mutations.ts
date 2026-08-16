@@ -151,7 +151,6 @@ export async function recordStockCount(args: {
   currentQty: number
   countedQty: number
   reason: 'stock_take' | 'purchase_in' | 'sale_out' | 'adjustment'
-  note?: string
   occurred_on: string
 }, staffId?: string) {
   const delta = args.countedQty - args.currentQty
@@ -162,7 +161,6 @@ export async function recordStockCount(args: {
     location: args.location,
     delta,
     reason: args.reason,
-    note: nz(args.note),
     occurred_on: args.occurred_on,
     created_by: staffId ?? null,
   })
@@ -177,11 +175,10 @@ export interface ProductInput {
   unit: string
   low_stock_threshold: number
   critical_stock_threshold: number
-  note?: string
 }
 
 export async function saveProduct(input: ProductInput, id?: string) {
-  const row = { ...input, note: nz(input.note) }
+  const row = { ...input }
   const q = id
     ? supabase.from('products').update(row).eq('id', id).select('id').single()
     : supabase.from('products').insert(row).select('id').single()
