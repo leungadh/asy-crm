@@ -93,6 +93,7 @@ export interface FollowupBoardRow {
   detail: string | null
   treatment_date: string
   display_status: DisplayStatus
+  service_id: string
 }
 
 export interface DashboardStats {
@@ -119,3 +120,13 @@ export interface CustomerPurchase {
   purchase_date: string
   note: string | null
 }
+
+export interface Product {
+  id: string
+  code: string
+  name_zh: string
+  unit: string
+}
+
+export const PAYMENT_METHODS = ['FPS', 'Cash', 'PayMe', 'Bank Transfer', 'Card'] as const
+export const CUSTOMER_SOURCES = ['Instagram', '朋友介紹', '舊客介紹', '其他'] as const

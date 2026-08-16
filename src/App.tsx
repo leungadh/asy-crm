@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
 import { I18nProvider } from '@/i18n'
+import { ToastProvider } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui'
 import Login from '@/pages/Login'
 import CustomerList from '@/pages/CustomerList'
@@ -34,11 +35,13 @@ function Gate() {
 export default function App() {
   return (
     <I18nProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Gate />
-        </BrowserRouter>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Gate />
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
     </I18nProvider>
   )
 }

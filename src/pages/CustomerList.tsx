@@ -9,13 +9,14 @@ import { CustomerStatusBadge, NodeStatusBadge } from '@/components/ui/statusBadg
 import { useCustomerList, useServices } from '@/hooks/useCustomers'
 import { useI18n } from '@/i18n'
 import { cn, formatMoney, waLink } from '@/lib/utils'
+import { CustomerForm } from '@/components/forms/CustomerForm'
 import type { CustomerSummary, CustomerStatus } from '@/types/database'
 
 type SortKey = 'recent' | 'spend' | 'visits' | 'name'
 
 export default function CustomerList() {
   const { t, locale } = useI18n()
-  const { data, loading, error } = useCustomerList()
+  const { data, loading, error, refetch } = useCustomerList()
   const services = useServices()
 
   const [query, setQuery] = useState('')
@@ -23,6 +24,7 @@ export default function CustomerList() {
   const [service, setService] = useState('all')
   const [sort, setSort] = useState<SortKey>('recent')
   const [selected, setSelected] = useState<CustomerSummary | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const rows = useMemo(() => {
     if (!data) return []
@@ -62,11 +64,18 @@ export default function CustomerList() {
     <AppShell
       title={t.customers.title}
       actions={
-        <Button variant="primary" size="sm" className="hidden sm:inline-flex">
-          <Plus className="size-4" /> {t.customers.add}
+        <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+          <Plus className="size-4" />
+          <span className="hidden sm:inline">{t.customers.add}</span>
         </Button>
       }
     >
+      <CustomerForm
+        open={adding}
+        onClose={() => setAdding(false)}
+        onSaved={() => refetch()}
+      />
+
       <h2 className="mb-4 text-xl font-semibold text-ink-900">{t.customers.overview}</h2>
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">

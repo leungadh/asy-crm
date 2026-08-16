@@ -1,16 +1,24 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronLeft, AtSign, Phone, Plus, CalendarPlus } from 'lucide-react'
+import { ChevronLeft, AtSign, Phone, Plus, Pencil } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Spinner } from '@/components/ui'
 import { CustomerStatusBadge, NodeStatusBadge } from '@/components/ui/statusBadge'
 import { useCustomerDetail } from '@/hooks/useCustomers'
 import { useI18n } from '@/i18n'
 import { formatMoney, waLink } from '@/lib/utils'
+import { CustomerForm } from '@/components/forms/CustomerForm'
+import { TreatmentForm } from '@/components/forms/TreatmentForm'
+import { PurchaseForm } from '@/components/forms/PurchaseForm'
+import { NodeActions } from '@/components/forms/NodeActions'
 
 export default function CustomerDetail() {
   const { id } = useParams()
   const { t, locale } = useI18n()
-  const { data, loading, error } = useCustomerDetail(id)
+  const { data, loading, error, refetch } = useCustomerDetail(id)
+  const [editing, setEditing] = useState(false)
+  const [addingTreatment, setAddingTreatment] = useState(false)
+  const [addingPurchase, setAddingPurchase] = useState(false)
 
   if (loading) return <AppShell title={t.common.loading}><Spinner label={t.common.loading} /></AppShell>
   if (error || !data) return <AppShell title={t.common.error}><EmptyState>{error}</EmptyState></AppShell>
@@ -38,8 +46,36 @@ export default function CustomerDetail() {
           <span>{c.name}</span>
         </span>
       }
-      actions={<Button size="sm" variant="primary"><Plus className="size-4" />{t.customers.addTreatment}</Button>}
+      actions={
+        <>
+          <Button size="sm" onClick={() => setEditing(true)}>
+            <Pencil className="size-3.5" /><span className="hidden sm:inline">{t.common.edit}</span>
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => setAddingTreatment(true)}>
+            <Plus className="size-4" /><span className="hidden sm:inline">{t.customers.addTreatment}</span>
+          </Button>
+        </>
+      }
     >
+      <CustomerForm
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={() => refetch()}
+        existing={c}
+      />
+      <TreatmentForm
+        open={addingTreatment}
+        onClose={() => setAddingTreatment(false)}
+        onSaved={() => refetch()}
+        customerId={c.id}
+      />
+      <PurchaseForm
+        open={addingPurchase}
+        onClose={() => setAddingPurchase(false)}
+        onSaved={() => refetch()}
+        customerId={c.id}
+      />
+
       <Link to="/customers" className="mb-4 inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-700 lg:hidden">
         <ChevronLeft className="size-4" />{t.detail.back}
       </Link>
@@ -148,7 +184,6 @@ export default function CustomerDetail() {
           <Card>
             <CardHeader
               title={t.detail.followupTimeline}
-              action={<Button size="sm"><Plus className="size-3.5" />{t.detail.addNode}</Button>}
             />
             {nodes.length === 0 ? (
               <EmptyState>{t.detail.noTreatments}</EmptyState>
@@ -161,6 +196,7 @@ export default function CustomerDetail() {
                       <th className="px-4 py-2.5 font-medium">{t.detail.dueDate}</th>
                       <th className="px-4 py-2.5 font-medium">{t.detail.nodeStatus}</th>
                       <th className="hidden px-4 py-2.5 font-medium sm:table-cell">{t.detail.nodeNote}</th>
+                      <th className="px-4 py-2.5" />
                     </tr>
                   </thead>
                   <tbody>
@@ -181,6 +217,9 @@ export default function CustomerDetail() {
                         <td className="hidden px-4 py-3 text-[13px] text-ink-500 sm:table-cell">
                           {n.note ?? t.common.none}
                         </td>
+                        <td className="px-4 py-3">
+                          <NodeActions node={n} onChanged={refetch} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -192,7 +231,11 @@ export default function CustomerDetail() {
           <Card>
             <CardHeader
               title={t.detail.purchases}
-              action={<Button size="sm"><Plus className="size-3.5" />{t.detail.addPurchase}</Button>}
+              action={
+                <Button size="sm" onClick={() => setAddingPurchase(true)}>
+                  <Plus className="size-3.5" />{t.detail.addPurchase}
+                </Button>
+              }
             />
             {purchases.length === 0 ? (
               <EmptyState>{t.common.none}</EmptyState>
@@ -247,9 +290,7 @@ export default function CustomerDetail() {
                     {reviewNode.window_end_date && ` – ${reviewNode.window_end_date}`}
                   </span>
                 </p>
-                <Button variant="primary" size="sm">
-                  <CalendarPlus className="size-4" />{t.detail.bookReview}
-                </Button>
+                <NodeStatusBadge status={reviewNode.display_status} />
               </div>
             </Card>
           )}

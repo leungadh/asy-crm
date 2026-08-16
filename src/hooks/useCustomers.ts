@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { CustomerSummary, FollowupBoardRow, Treatment, Service } from '@/types/database'
+import type { CustomerSummary, FollowupBoardRow, Treatment, Service, Product } from '@/types/database'
 
 interface State<T> { data: T | null; loading: boolean; error: string | null }
 
 export function useCustomerList() {
   const [state, setState] = useState<State<CustomerSummary[]>>({ data: null, loading: true, error: null })
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -18,9 +19,9 @@ export function useCustomerList() {
         setState({ data: (data ?? []) as CustomerSummary[], loading: false, error: error?.message ?? null })
       })
     return () => { cancelled = true }
-  }, [])
+  }, [tick])
 
-  return state
+  return { ...state, refetch: () => setTick((n) => n + 1) }
 }
 
 export function useServices() {
@@ -42,6 +43,7 @@ export interface CustomerDetailData {
 
 export function useCustomerDetail(id: string | undefined) {
   const [state, setState] = useState<State<CustomerDetailData>>({ data: null, loading: true, error: null })
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     if (!id) return
@@ -77,7 +79,17 @@ export function useCustomerDetail(id: string | undefined) {
 
     load()
     return () => { cancelled = true }
-  }, [id])
+  }, [id, tick])
 
-  return state
+  return { ...state, refetch: () => setTick((n) => n + 1) }
+}
+
+export function useProducts() {
+  const [products, setProducts] = useState<Product[]>([])
+  useEffect(() => {
+    supabase.from('products').select('id, code, name_zh, unit')
+      .eq('is_active', true).order('sort_order')
+      .then(({ data }) => setProducts((data ?? []) as Product[]))
+  }, [])
+  return products
 }

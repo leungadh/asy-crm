@@ -142,6 +142,82 @@ console.log(`${staffRows > 0 ? '✅' : '❌'} Allowlisted user (Yoyo) sees ${sta
 console.log(`${strangerRows === 0 ? '✅' : '❌'} Non-allowlisted user sees ${strangerRows} customers`);
 if (staffRows === 0 || strangerRows !== 0) process.exitCode = 1;
 
+// ── Write paths: exactly what the UI forms do ──────────────────────────────
+console.log('\n════ WRITE PATHS (mirrors the app forms) ════')
+
+// CustomerForm
+const newCust = (await c.query(`
+  insert into customers (name, phone, source, instagram, birthday, occupation, tags, remark, status)
+  values ('Test Client','9000 0001','Instagram','test.client','1990-01-01','Tester',
+          '{VIP,敏感肌}','line one\nline two','active_followup')
+  returning id`)).rows[0].id
+await check('CustomerForm insert stores free-form tags',
+  `select array_length(tags,1)::text result from customers where id='${newCust}'`, '2')
+
+// TreatmentForm — the trigger must generate the timeline AND the income row
+const svc = (await c.query(`select id from services where code='areola'`)).rows[0].id
+const newTx = (await c.query(`
+  insert into treatments (customer_id, service_id, detail, treatment_date, amount,
+                          payment_method, pigment_used, remark, rating)
+  values ('${newCust}','${svc}','雙側乳暈', current_date, 4680, 'FPS','Areola Mix 2','ok',5)
+  returning id`)).rows[0].id
+await check('TreatmentForm insert generates 5 follow-up nodes',
+  `select count(*)::text result from followup_nodes where treatment_id='${newTx}'`, '5')
+await check('TreatmentForm insert creates exactly one income row',
+  `select count(*)::text result from ledger_entries where treatment_id='${newTx}'`, '1')
+await check('...and that row carries the payment method through',
+  `select payment_method result from ledger_entries where treatment_id='${newTx}'`, 'FPS')
+await check('TreatmentForm insert backfills first_visit_date',
+  `select (first_visit_date is not null)::text result from customers where id='${newCust}'`, 'true')
+
+// PurchaseForm — income row yes, stock movement no
+const prod = (await c.query(`select id from products where code='P1'`)).rows[0].id
+const stockBeforeBuy = (await c.query(`select total_qty from v_stock_levels where code='P1'`)).rows[0].total_qty
+const newBuy = (await c.query(`
+  insert into customer_purchases (customer_id, product_id, quantity, amount, payment_method, ship_from, purchase_date)
+  values ('${newCust}','${prod}',2,760,'PayMe','home', current_date) returning id`)).rows[0].id
+await check('PurchaseForm insert creates a 產品銷售 income row',
+  `select category result from ledger_entries where purchase_id='${newBuy}'`, '產品銷售')
+const stockAfterBuy = (await c.query(`select total_qty from v_stock_levels where code='P1'`)).rows[0].total_qty
+console.log(`${stockBeforeBuy === stockAfterBuy ? '✅' : '❌'} PurchaseForm leaves stock untouched → ${stockBeforeBuy} then ${stockAfterBuy}`)
+if (stockBeforeBuy !== stockAfterBuy) process.exitCode = 1
+
+// NodeActions — status transitions drive the derived badge
+const node = (await c.query(`
+  select id from followup_nodes where treatment_id='${newTx}' and node_type='follow_up' order by sequence limit 1`)).rows[0].id
+await c.query(`update followup_nodes set status='contacted', contacted_at=now() where id='${node}'`)
+await check('Marking contacted derives the 待回覆 badge',
+  `select display_status result from v_followup_board where id='${node}'`, 'awaiting_reply')
+await c.query(`update followup_nodes set status='done', completed_at=now() where id='${node}'`)
+await check('Marking done derives the 已完成 badge',
+  `select display_status result from v_followup_board where id='${node}'`, 'done')
+
+// BookReviewModal — needs service_id on the view, added in migration 0006
+await check('v_followup_board exposes service_id for review booking',
+  `select (service_id is not null)::text result from v_followup_board where treatment_id='${newTx}' limit 1`, 'true')
+const reviewNode = (await c.query(`
+  select id, customer_id, service_id from v_followup_board
+  where treatment_id='${newTx}' and node_type='review' limit 1`)).rows[0]
+await c.query(`
+  insert into appointments (customer_id, type, service_id, followup_node_id, starts_at, duration_minutes)
+  values ('${reviewNode.customer_id}','review','${reviewNode.service_id}','${reviewNode.id}', now() + interval '3 days', 60)`)
+await check('Booking a review flips its node to 已預約',
+  `select display_status result from v_followup_board where id='${reviewNode.id}'`, 'booked')
+
+// Editing an amount must move the ledger with it
+await c.query(`update treatments set amount = 4200 where id='${newTx}'`)
+await check('Editing a treatment amount re-syncs the income row',
+  `select amount::int::text result from ledger_entries where treatment_id='${newTx}'`, '4200')
+
+// Cleanup so counts elsewhere stay meaningful
+await c.query(`delete from customers where id='${newCust}'`)
+await check('Deleting a customer cascades treatments, nodes and ledger rows',
+  `select (
+     (select count(*) from treatments where customer_id='${newCust}') +
+     (select count(*) from ledger_entries where treatment_id='${newTx}') +
+     (select count(*) from followup_nodes where treatment_id='${newTx}')
+   )::text result`, '0')
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');
