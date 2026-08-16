@@ -14,10 +14,20 @@ const typeTone: Record<string, BadgeTone> = {
   treatment: 'rose', follow_up: 'violet', review: 'amber',
 }
 
+/** End time, so the grid shows chair time rather than just arrival. */
+function timeRange(iso: string, minutes: number): string {
+  const start = new Date(iso)
+  const end = new Date(start.getTime() + minutes * 60_000)
+  const f = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return minutes > 0 ? `${f(start)}–${f(end)}` : f(start)
+}
+
 /** Overdue is a status, not a type, so it wins over the type colour. */
 function tone(e: CalendarEvent): BadgeTone {
   if (e.event_status === 'overdue') return 'red'
-  if (e.event_status === 'done') return 'emerald'
+  // Treatment rows carry treatment_status, not node status.
+  if (e.event_status === 'done' || e.event_status === 'completed') return 'emerald'
+  if (e.event_status === 'in_progress') return 'emerald'
   return typeTone[e.event_type] ?? 'slate'
 }
 
@@ -58,7 +68,7 @@ export default function Calendar() {
   }
 
   const todays = (byDay.get(today) ?? []).filter(passes)
-  const todayAppointments = todays.filter((e) => e.source === 'appointment')
+  const todayAppointments = todays.filter((e) => e.duration_minutes > 0)
   const todayFollowUps = todays.filter((e) => e.event_type === 'follow_up')
   const todayReviews = todays.filter((e) => e.event_type === 'review')
 
@@ -172,7 +182,7 @@ export default function Calendar() {
                                       : tone(e) === 'violet' ? 'bg-violet-50 text-violet-700'
                                       : tone(e) === 'amber' ? 'bg-amber-50 text-amber-700'
                                       : 'bg-rose-50 text-rose-700')}>
-                              {e.source === 'appointment' && (
+                              {e.duration_minutes > 0 && (
                                 <span className="mr-1 font-medium">{hhmm(e.event_at)}</span>
                               )}
                               {e.customer_name}
@@ -211,7 +221,9 @@ export default function Calendar() {
                         <tr key={e.id + e.source} className="border-t border-cream-200 hover:bg-cream-50">
                           <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">{localDay(e.event_at)}</td>
                           <td className="whitespace-nowrap px-4 py-2.5 text-ink-600">
-                            {e.source === 'appointment' ? hhmm(e.event_at) : t.common.none}
+                            {e.duration_minutes > 0
+                              ? timeRange(e.event_at, e.duration_minutes)
+                              : t.common.none}
                           </td>
                           <td className="px-4 py-2.5">
                             <Link to={`/customers/${e.customer_id}`}
@@ -336,7 +348,9 @@ function Bucket({ label, items, showTime }: {
         {items.map((e) => (
           <li key={e.id + e.source} className="flex items-center gap-2">
             {showTime && (
-              <span className="w-11 shrink-0 text-xs font-medium text-ink-600">{hhmm(e.event_at)}</span>
+              <span className="w-24 shrink-0 text-xs font-medium text-ink-600">
+                {timeRange(e.event_at, e.duration_minutes)}
+              </span>
             )}
             <Avatar name={e.customer_name} size="sm" />
             <div className="min-w-0 flex-1">

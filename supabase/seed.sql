@@ -162,21 +162,34 @@ update followup_nodes set note = '整體上色效果評估'     where sequence =
 update followup_nodes set note = '評估是否需要補色'     where node_type = 'review' and note is null;
 update followup_nodes set note = '長期穩定度追蹤'       where sequence = 5 and note is null;
 
--- ─── Upcoming appointments ──────────────────────────────────────────────────
-insert into appointments (customer_id, type, service_id, starts_at, duration_minutes, notes, status)
+-- ─── Upcoming bookings ──────────────────────────────────────────────────────
+-- Since 0009 a booking IS a treatment with status 'scheduled': no amount, no
+-- follow-up timeline and no income row until it is actually performed.
+insert into treatments (customer_id, service_id, detail, treatment_date, start_time,
+                        duration_minutes, status, amount)
 select
   c.id,
-  'treatment',
   s.id,
-  (date '2026-08-17' + (n || ' days')::interval + time '11:00') at time zone 'Asia/Hong_Kong',
-  120,
   NULL,
-  'scheduled'
+  date '2026-08-17' + n,
+  (array['10:00','11:00','14:00','15:30','17:00'])[1 + floor(random() * 5)::int]::time,
+  (array[60, 90, 120])[1 + floor(random() * 3)::int],
+  'scheduled',
+  NULL
 from generate_series(0, 9) n
 cross join lateral (select id from customers order by random() limit 1) c
 cross join lateral (select id from services  order by random() limit 1) s;
 
--- Book the review nodes that are already inside their window
+-- Give the historical records plausible arrival times too, so the calendar is
+-- not empty when looking back.
+update treatments
+   set start_time = (array['10:00','11:00','14:00','15:30','17:00'])[1 + floor(random() * 5)::int]::time,
+       duration_minutes = (array[60, 90, 120])[1 + floor(random() * 3)::int]
+ where status <> 'scheduled';
+
+-- Book a few 回診. Selecting on display_status made this depend on the random
+-- ageing above and some runs produced none at all, so pick on the stored
+-- status instead: deterministic, and always yields rows if review nodes exist.
 insert into appointments (customer_id, type, service_id, followup_node_id, starts_at, duration_minutes, status)
 select
   b.customer_id,
@@ -189,8 +202,9 @@ select
 from v_followup_board b
 join treatments t on t.id = b.treatment_id
 where b.node_type = 'review'
-  and b.display_status = 'pending_booking'
-limit 5;
+  and b.status not in ('done', 'skipped', 'booked')
+order by b.due_at
+limit 3;
 
 -- ─── Stock ──────────────────────────────────────────────────────────────────
 -- Opening stock-take reproducing the 存貨管理 mockup exactly:

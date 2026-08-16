@@ -72,22 +72,33 @@ const check = async (label, sql, expect) => {
   } catch (e) { fail(label, e); }
 };
 
-await check('Every treatment has exactly one auto income row',
+await check('Every PERFORMED treatment has exactly one auto income row',
   `select count(*)::text result from treatments t
-     where (select count(*) from ledger_entries l where l.treatment_id=t.id) <> 1`, '0');
+     where t.status <> 'scheduled'
+       and (select count(*) from ledger_entries l where l.treatment_id=t.id) <> 1`, '0')
+await check('A booking has no income row until it is performed',
+  `select count(*)::text result from treatments t
+     where t.status = 'scheduled'
+       and exists (select 1 from ledger_entries l where l.treatment_id=t.id)`, '0')
+await check('A booking generates no follow-up timeline',
+  `select count(*)::text result from treatments t
+     where t.status = 'scheduled'
+       and exists (select 1 from followup_nodes n where n.treatment_id=t.id)`, '0');
 await check('Every purchase has exactly one auto income row',
   `select count(*)::text result from customer_purchases p
      where (select count(*) from ledger_entries l where l.purchase_id=p.id) <> 1`, '0');
 await check('Areola/VIO treatments each generated 5 follow-up nodes',
   `select count(*)::text result from treatments t join services s on s.id=t.service_id
-     where s.code in ('areola','vio')
+     where s.code in ('areola','vio') and t.status <> 'scheduled'
        and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 5`, '0');
 await check('Lip treatments each generated 3 nodes',
   `select count(*)::text result from treatments t join services s on s.id=t.service_id
-     where s.code='lip' and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 3`, '0');
+     where s.code='lip' and t.status <> 'scheduled'
+       and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 3`, '0');
 await check('Body treatments each generated 1 node',
   `select count(*)::text result from treatments t join services s on s.id=t.service_id
-     where s.code='body' and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 1`, '0');
+     where s.code='body' and t.status <> 'scheduled'
+       and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 1`, '0');
 await check('Only Areola/VIO have review nodes',
   `select count(*)::text result from followup_nodes n
      join treatments t on t.id=n.treatment_id join services s on s.id=t.service_id
@@ -110,7 +121,8 @@ await check('Two staff rows seeded',  `select count(*)::text result from staff`,
 
 // ── Trigger behaviour: editing a treatment must move its income row ────────
 console.log('\n════ TRIGGER BEHAVIOUR ════');
-await c.query(`update treatments set amount = 9999 where id = (select id from treatments limit 1)`);
+await c.query(`update treatments set amount = 9999
+                 where id = (select id from treatments where status <> 'scheduled' limit 1)`);
 await check('Editing treatment amount updates the ledger row',
   `select l.amount::int::text result from ledger_entries l
      join treatments t on t.id=l.treatment_id where t.amount=9999 limit 1`, '9999');
@@ -273,6 +285,7 @@ await check('Repeat customers exist in the seed, so history is exercised',
 
 const repeat = (await c.query(`
   select customer_id, count(*)::int visits from treatments
+  where status <> 'scheduled'
   group by customer_id order by visits desc limit 1`)).rows[0]
 
 await check('Every follow-up node maps to exactly one treatment',
@@ -290,7 +303,7 @@ await check('Treatments are orderable newest-first without ties breaking groupin
 const spread = (await c.query(`
   select t.id, t.treatment_date, count(n.id)::int nodes
   from treatments t left join followup_nodes n on n.treatment_id = t.id
-  where t.customer_id = '${repeat.customer_id}'
+  where t.customer_id = '${repeat.customer_id}' and t.status <> 'scheduled'
   group by t.id order by t.treatment_date desc`)).rows
 console.log(`   ↳ busiest client has ${repeat.visits} visits; nodes per visit: ${spread.map(r => r.nodes).join(', ')}`)
 
@@ -371,17 +384,17 @@ await check('Rollup income matches summing entries for that month',
 // ── Calendar ──────────────────────────────────────────────────────────────
 console.log('\n════ CALENDAR ════')
 
-await check('v_calendar_events unions all three sources',
-  `select count(distinct source)::text result from v_calendar_events`, '3')
+await check('v_calendar_events unions all four sources',
+  `select count(distinct source)::text result from v_calendar_events`, '4')
 await check('Every event carries a customer to link through to',
   `select count(*)::text result from v_calendar_events where customer_id is null`, '0')
-await check('Appointments have a real duration; follow-ups do not',
+await check('Only things occupying chair time carry a duration',
   `select count(*)::text result from v_calendar_events
-     where (source = 'appointment' and duration_minutes <= 0)
-        or (source <> 'appointment' and duration_minutes <> 0)`, '0')
-await check('Completed and skipped nodes are excluded from the calendar',
+     where (source in ('appointment','treatment') and duration_minutes <= 0)
+        or (source in ('followup','review_window') and duration_minutes <> 0)`, '0')
+await check('Completed and skipped follow-up nodes are excluded from the calendar',
   `select count(*)::text result from v_calendar_events
-     where source <> 'appointment' and event_status in ('done','skipped')`, '0')
+     where source in ('followup','review_window') and event_status in ('done','skipped')`, '0')
 await check('Booked reviews drop out of the review-window source',
   `select count(*)::text result from v_calendar_events
      where source = 'review_window' and event_status = 'booked'`, '0')
@@ -393,6 +406,67 @@ console.log('   ↳ ' + calSpread.map(r => `${r.source}: ${r.n}`).join(', '))
 const overdueN = (await c.query(`
   select count(*)::int n from v_calendar_events where event_status = 'overdue'`)).rows[0].n
 console.log(`   ↳ overdue events surfaced in the right rail: ${overdueN}`)
+
+// ── Booking lifecycle ─────────────────────────────────────────────────────
+console.log('\n════ BOOKING LIFECYCLE ════')
+
+const bcust = (await c.query(`insert into customers (name, phone) values ('Booking Test','9000 0002') returning id`)).rows[0].id
+const bsvc  = (await c.query(`select id from services where code='vio'`)).rows[0].id
+
+// 1. Book it
+const booking = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, start_time,
+                          duration_minutes, status, amount)
+  values ('${bcust}','${bsvc}', current_date + 7, '14:30', 120, 'scheduled', null)
+  returning id`)).rows[0].id
+
+await check('A booking may be saved with no amount',
+  `select (amount is null)::text result from treatments where id='${booking}'`, 'true')
+await check('A booking generates no follow-up nodes',
+  `select count(*)::text result from followup_nodes where treatment_id='${booking}'`, '0')
+await check('A booking generates no income row',
+  `select count(*)::text result from ledger_entries where treatment_id='${booking}'`, '0')
+await check('A booking does not set first_visit_date',
+  `select (first_visit_date is null)::text result from customers where id='${bcust}'`, 'true')
+await check('A booking is not counted as a visit',
+  `select coalesce(visit_count,0)::text result from v_customer_summary where id='${bcust}'`, '0')
+await check('A booking contributes nothing to lifetime value',
+  `select coalesce(lifetime_value,0)::int::text result from v_customer_summary where id='${bcust}'`, '0')
+await check('The booking appears on the calendar with its chair time',
+  `select duration_minutes::text result from v_calendar_events
+     where id='${booking}' and source='treatment'`, '120')
+await check('...at the arrival time that was booked',
+  `select to_char(event_at at time zone 'Asia/Hong_Kong','HH24:MI') result
+     from v_calendar_events where id='${booking}' and source='treatment'`, '14:30')
+
+// 2. Complete it — exactly what CompleteTreatmentForm does
+await c.query(`
+  update treatments
+     set status='in_progress', amount=6680, payment_method='FPS', rating=5
+   where id='${booking}'`)
+
+await check('Completing generates the full VIO follow-up timeline',
+  `select count(*)::text result from followup_nodes where treatment_id='${booking}'`, '5')
+await check('Completing books the income',
+  `select amount::int::text result from ledger_entries where treatment_id='${booking}'`, '6680')
+await check('Completing backfills first_visit_date',
+  `select (first_visit_date is not null)::text result from customers where id='${bcust}'`, 'true')
+await check('Completing counts it as a visit',
+  `select visit_count::text result from v_customer_summary where id='${bcust}'`, '1')
+
+// 3. Idempotence: a second status update must not duplicate anything
+await c.query(`update treatments set status='completed' where id='${booking}'`)
+await check('A further status change does not duplicate the timeline',
+  `select count(*)::text result from followup_nodes where treatment_id='${booking}'`, '5')
+await check('...nor duplicate the income row',
+  `select count(*)::text result from ledger_entries where treatment_id='${booking}'`, '1')
+
+// 4. Reverting to a booking must withdraw the income
+await c.query(`update treatments set status='scheduled', amount=null where id='${booking}'`)
+await check('Reverting to a booking removes the income row',
+  `select count(*)::text result from ledger_entries where treatment_id='${booking}'`, '0')
+
+await c.query(`delete from customers where id='${bcust}'`)
 
 await c.end();
 await pg.stop();

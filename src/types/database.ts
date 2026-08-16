@@ -2,7 +2,7 @@
  *  supabase gen types typescript --linked > src/types/database.ts        */
 
 export type CustomerStatus = 'active_followup' | 'pending_review' | 'dormant' | 'completed'
-export type TreatmentStatus = 'in_progress' | 'completed'
+export type TreatmentStatus = 'scheduled' | 'in_progress' | 'completed'
 export type NodeType = 'follow_up' | 'review'
 export type NodeStatus = 'pending' | 'contacted' | 'replied' | 'booked' | 'done' | 'skipped'
 export type StockLocation = 'studio' | 'home'
@@ -43,6 +43,7 @@ export interface CustomerSummary extends Customer {
   next_followup_at: string | null
   next_followup_label: string | null
   next_followup_status: DisplayStatus | null
+  next_booking_at: string | null
 }
 
 export interface Service {
@@ -61,7 +62,9 @@ export interface Treatment {
   service_id: string
   detail: string | null
   treatment_date: string
-  amount: string
+  start_time: string | null
+  duration_minutes: number
+  amount: string | null
   payment_method: string | null
   pigment_used: string | null
   remark: string | null
@@ -203,7 +206,7 @@ export interface MonthlyLedger {
 
 export interface CalendarEvent {
   id: string
-  source: 'appointment' | 'followup' | 'review_window'
+  source: 'appointment' | 'treatment' | 'followup' | 'review_window'
   event_type: 'treatment' | 'review' | 'follow_up'
   event_at: string
   duration_minutes: number

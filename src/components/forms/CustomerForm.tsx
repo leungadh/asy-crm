@@ -7,11 +7,13 @@ import { useI18n } from '@/i18n'
 import { saveCustomer, type CustomerInput } from '@/lib/mutations'
 import { CUSTOMER_SOURCES, type Customer, type CustomerStatus } from '@/types/database'
 
-export function CustomerForm({ open, onClose, onSaved, existing }: {
+export function CustomerForm({ open, onClose, onSaved, existing, initialName }: {
   open: boolean
   onClose: () => void
   onSaved: (id: string) => void
   existing?: Customer
+  /** Prefills the name when created from the treatment form's picker. */
+  initialName?: string
 }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -19,7 +21,7 @@ export function CustomerForm({ open, onClose, onSaved, existing }: {
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const [form, setForm] = useState<CustomerInput>({
-    name: existing?.name ?? '',
+    name: existing?.name ?? initialName ?? '',
     phone: existing?.phone ?? '',
     source: existing?.source ?? '',
     instagram: existing?.instagram ?? '',

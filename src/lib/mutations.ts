@@ -46,16 +46,21 @@ export interface TreatmentInput {
   service_id: string
   detail?: string
   treatment_date: string
-  amount: number
+  start_time?: string
+  duration_minutes: number
+  /** Null while the treatment is only booked. */
+  amount: number | null
   payment_method?: string
   pigment_used?: string
   remark?: string
   rating: number | null
+  status: 'scheduled' | 'in_progress'
 }
 
-/** Inserting fires two database triggers: the follow-up timeline is generated
- *  from followup_rules, and a 療程收入 ledger row is created. Neither is done
- *  here — doing it client-side would double up. */
+/** Inserting a PERFORMED treatment fires two database triggers: the follow-up
+ *  timeline is generated from followup_rules, and a 療程收入 ledger row is
+ *  created. Neither is done here — doing it client-side would double up.
+ *  A booking (status 'scheduled') deliberately triggers neither. */
 export async function createTreatment(input: TreatmentInput, staffId?: string) {
   const { data, error } = await supabase
     .from('treatments')
@@ -64,11 +69,14 @@ export async function createTreatment(input: TreatmentInput, staffId?: string) {
       service_id: input.service_id,
       detail: nz(input.detail),
       treatment_date: input.treatment_date,
+      start_time: nz(input.start_time),
+      duration_minutes: input.duration_minutes,
       amount: input.amount,
       payment_method: nz(input.payment_method),
       pigment_used: nz(input.pigment_used),
       remark: nz(input.remark),
       rating: input.rating,
+      status: input.status,
       created_by: staffId ?? null,
     })
     .select('id')
@@ -267,4 +275,50 @@ export async function copyPreviousMonthExpenses(
   const { error: insErr } = await supabase.from('ledger_entries').insert(rows)
   if (insErr) throw new Error(insErr.message)
   return { copied: rows.length }
+}
+
+
+export interface CompleteTreatmentInput {
+  amount: number
+  payment_method?: string
+  pigment_used?: string
+  remark?: string
+  rating: number | null
+  treatment_date?: string
+}
+
+/** Turns a booking into a performed treatment. The status change is what
+ *  makes the database generate the follow-up timeline and the income row, so
+ *  it must be part of this single update. */
+export async function completeTreatment(id: string, input: CompleteTreatmentInput) {
+  const patch: Record<string, unknown> = {
+    status: 'in_progress',
+    amount: input.amount,
+    payment_method: nz(input.payment_method),
+    pigment_used: nz(input.pigment_used),
+    remark: nz(input.remark),
+    rating: input.rating,
+  }
+  if (input.treatment_date) patch.treatment_date = input.treatment_date
+
+  const { error } = await supabase.from('treatments').update(patch).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function rescheduleTreatment(
+  id: string, treatment_date: string, start_time: string | null, duration_minutes: number,
+) {
+  const { error } = await supabase
+    .from('treatments')
+    .update({ treatment_date, start_time: nz(start_time ?? undefined), duration_minutes })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function cancelBooking(id: string) {
+  // Only a booking can be deleted outright. A performed treatment carries a
+  // follow-up timeline and an income row, so it must be reversed deliberately.
+  const { error } = await supabase
+    .from('treatments').delete().eq('id', id).eq('status', 'scheduled')
+  if (error) throw new Error(error.message)
 }

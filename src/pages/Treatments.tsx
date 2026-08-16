@@ -1,14 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ClipboardList, Plus, Search } from 'lucide-react'
+import { ClipboardList, Plus, Search, CalendarClock, Check, Trash2 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Avatar, Badge, Button, Card, EmptyState, Input, Select, Spinner, StatCard, type BadgeTone } from '@/components/ui'
 import { NodeStatusBadge } from '@/components/ui/statusBadge'
 import { TreatmentForm } from '@/components/forms/TreatmentForm'
+import { CompleteTreatmentForm } from '@/components/forms/CompleteTreatmentForm'
+import { useToast } from '@/components/ui/toast'
+import { cancelBooking } from '@/lib/mutations'
 import { useTreatments } from '@/hooks/useStock'
 import { useServices } from '@/hooks/useCustomers'
 import { useI18n } from '@/i18n'
 import { formatMoney } from '@/lib/utils'
+import type { TreatmentRow } from '@/types/database'
 
 const accentTone: Record<string, BadgeTone> = {
   rose: 'rose', violet: 'violet', pink: 'pink', amber: 'amber',
@@ -19,7 +23,9 @@ export default function Treatments() {
   const { rows, nodes, loading, error, refetch } = useTreatments()
   const services = useServices()
 
+  const toast = useToast()
   const [adding, setAdding] = useState(false)
+  const [completing, setCompleting] = useState<TreatmentRow | null>(null)
   const [query, setQuery] = useState('')
   const [serviceCode, setServiceCode] = useState('all')
 
@@ -53,9 +59,15 @@ export default function Treatments() {
     })
   }, [rows, query, serviceCode])
 
+  const upcoming = useMemo(() => {
+    const today = new Date().toLocaleDateString('en-CA')
+    return (rows ?? []).filter((r) => r.status === 'scheduled' && r.treatment_date >= today).length
+  }, [rows])
+
   const monthCount = useMemo(() => {
     const prefix = new Date().toISOString().slice(0, 7)
-    return (rows ?? []).filter((r) => r.treatment_date.startsWith(prefix)).length
+    // A booking is not a treatment performed this month.
+    return (rows ?? []).filter((r) => r.treatment_date.startsWith(prefix) && r.status !== 'scheduled').length
   }, [rows])
 
   const byService = useMemo(() => {
@@ -75,12 +87,18 @@ export default function Treatments() {
       }
     >
       <TreatmentForm open={adding} onClose={() => setAdding(false)} onSaved={refetch} />
+      {completing && (
+        <CompleteTreatmentForm treatment={completing}
+                               onClose={() => setCompleting(null)} onSaved={refetch} />
+      )}
 
       <p className="mb-4 text-sm text-ink-500">{t.treatments.subtitle}</p>
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard icon={<ClipboardList className="size-5" />} label={t.treatments.thisMonth}
                   value={monthCount} tone="rose" />
+        <StatCard icon={<CalendarClock className="size-5" />} label={t.treatments.upcoming}
+                  value={upcoming} tone="sky" />
         {services.map((s) => (
           <StatCard
             key={s.id}
@@ -117,12 +135,14 @@ export default function Treatments() {
               <thead>
                 <tr className="bg-rose-50/60 text-left text-[13px] text-ink-500">
                   <th className="px-4 py-3 font-medium">{t.treatments.date}</th>
+                  <th className="hidden px-4 py-3 font-medium sm:table-cell">{t.treatments.startTime}</th>
                   <th className="px-4 py-3 font-medium">{t.treatments.customer}</th>
                   <th className="px-4 py-3 font-medium">{t.treatments.service}</th>
                   <th className="hidden px-4 py-3 font-medium md:table-cell">{t.treatments.detail}</th>
                   <th className="px-4 py-3 text-right font-medium">{t.treatments.amount}</th>
                   <th className="hidden px-4 py-3 font-medium lg:table-cell">{t.treatments.followup}</th>
                   <th className="hidden px-4 py-3 font-medium xl:table-cell">{t.treatments.statusLabel}</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -133,6 +153,14 @@ export default function Treatments() {
                     <tr key={r.id} className="border-t border-cream-200 hover:bg-cream-50">
                       <td className="whitespace-nowrap px-4 text-ink-600" style={{ paddingBlock: 'var(--row-py)' }}>
                         {r.treatment_date}
+                      </td>
+                      <td className="hidden whitespace-nowrap px-4 text-ink-600 sm:table-cell">
+                        {r.start_time ? r.start_time.slice(0, 5) : t.common.none}
+                        {r.start_time && (
+                          <span className="ml-1 text-xs text-ink-400">
+                            {r.duration_minutes}{t.treatments.minutes}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4">
                         <Link to={`/customers/${r.customer.id}`}
@@ -148,14 +176,40 @@ export default function Treatments() {
                       </td>
                       <td className="hidden px-4 text-ink-600 md:table-cell">{r.detail ?? t.common.none}</td>
                       <td className="whitespace-nowrap px-4 text-right font-medium text-ink-700">
-                        {formatMoney(r.amount)}
+                        {r.amount === null ? <span className="text-ink-300">{t.common.none}</span>
+                                           : formatMoney(r.amount)}
                       </td>
                       <td className="hidden whitespace-nowrap px-4 text-ink-600 lg:table-cell">
                         {p ? `${p.done}/${p.total}` : t.common.none}
                       </td>
                       <td className="hidden px-4 xl:table-cell">
-                        {nx ? <NodeStatusBadge status={nx.display_status} />
-                            : <Badge tone="emerald">{t.treatments.completed}</Badge>}
+                        {r.status === 'scheduled'
+                          ? <Badge tone="sky">{t.treatments.scheduled}</Badge>
+                          : nx ? <NodeStatusBadge status={nx.display_status} />
+                               : <Badge tone="emerald">{t.treatments.completed}</Badge>}
+                      </td>
+                      <td className="px-4">
+                        {r.status === 'scheduled' && (
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="primary" onClick={() => setCompleting(r)}>
+                              <Check className="size-3.5" />
+                              <span className="hidden lg:inline">{t.treatments.complete}</span>
+                            </Button>
+                            <Button size="sm" variant="ghost" title={t.treatments.cancelBooking}
+                                    onClick={async () => {
+                                      if (!window.confirm(t.treatments.confirmCancel)) return
+                                      try {
+                                        await cancelBooking(r.id)
+                                        toast(t.treatments.cancelled)
+                                        refetch()
+                                      } catch (e) {
+                                        toast(`${t.form.saveFailed}: ${(e as Error).message}`, 'error')
+                                      }
+                                    }}>
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )

@@ -3,36 +3,43 @@ import { Info } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { FormRow, StarRating, Textarea } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
+import { CustomerPicker } from './CustomerPicker'
 import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
-import { useServices, useCustomerList } from '@/hooks/useCustomers'
+import { useServices } from '@/hooks/useCustomers'
 import { useAuth } from '@/hooks/useAuth'
 import { createTreatment } from '@/lib/mutations'
 import { PAYMENT_METHODS } from '@/types/database'
+import { cn } from '@/lib/utils'
 
 const today = () => new Date().toISOString().slice(0, 10)
+const DURATIONS = [30, 60, 90, 120, 150, 180]
 
-export function TreatmentForm({ open, onClose, onSaved, customerId }: {
+/** One form, two modes. A booking is a treatment with status 'scheduled':
+ *  same row, filled in later. */
+export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode = 'booking' }: {
   open: boolean
   onClose: () => void
   onSaved: () => void
-  /** Omit to show a customer picker — lets the form be opened from anywhere,
-   *  not just from inside a customer's profile. */
+  /** Omit to show the customer picker. */
   customerId?: string
+  defaultMode?: 'booking' | 'record'
 }) {
   const { t, locale } = useI18n()
   const toast = useToast()
   const services = useServices()
   const { staff } = useAuth()
 
-  const customers = useCustomerList()
+  const [mode, setMode] = useState<'booking' | 'record'>(defaultMode)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+
   const [pickedCustomer, setPickedCustomer] = useState('')
-  const [customerQuery, setCustomerQuery] = useState('')
   const [serviceId, setServiceId] = useState('')
   const [detail, setDetail] = useState('')
   const [date, setDate] = useState(today())
+  const [startTime, setStartTime] = useState('11:00')
+  const [duration, setDuration] = useState(90)
   const [amount, setAmount] = useState('')
   const [payment, setPayment] = useState('')
   const [pigment, setPigment] = useState('')
@@ -41,30 +48,43 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
 
   const targetCustomer = customerId ?? pickedCustomer
 
+  function reset() {
+    setPickedCustomer(''); setServiceId(''); setDetail(''); setAmount('')
+    setPigment(''); setRemark(''); setRating(null); setPayment('')
+    setDate(today()); setStartTime('11:00'); setDuration(90)
+  }
+
   async function submit() {
     const next: Record<string, string> = {}
     if (!targetCustomer) next.customer = t.form.required
     if (!serviceId) next.service = t.form.required
+
     const amt = Number(amount)
-    if (!amount.trim() || Number.isNaN(amt) || amt < 0) next.amount = t.form.invalidAmount
+    if (mode === 'record' && (!amount.trim() || Number.isNaN(amt) || amt < 0)) {
+      next.amount = t.form.invalidAmount
+    }
     if (Object.keys(next).length) { setErrors(next); return }
 
     setErrors({})
     setSaving(true)
     try {
-      await createTreatment(
-        { customer_id: targetCustomer, service_id: serviceId, detail, treatment_date: date,
-          amount: amt, payment_method: payment, pigment_used: pigment, remark, rating },
-        staff?.id,
-      )
+      await createTreatment({
+        customer_id: targetCustomer,
+        service_id: serviceId,
+        detail,
+        treatment_date: date,
+        start_time: startTime,
+        duration_minutes: duration,
+        amount: mode === 'record' ? amt : null,
+        payment_method: mode === 'record' ? payment : undefined,
+        pigment_used: mode === 'record' ? pigment : undefined,
+        remark: mode === 'record' ? remark : undefined,
+        rating: mode === 'record' ? rating : null,
+        status: mode === 'record' ? 'in_progress' : 'scheduled',
+      }, staff?.id)
+
       toast(t.form.saved)
-      setPickedCustomer('')
-      setServiceId('')
-      setDetail('')
-      setAmount('')
-      setPigment('')
-      setRemark('')
-      setRating(null)
+      reset()
       onSaved()
       onClose()
     } catch (e) {
@@ -80,7 +100,7 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
     <Modal
       open={open}
       onClose={onClose}
-      title={t.form.addTreatment}
+      title={mode === 'booking' ? t.treatments.bookingMode : t.treatments.recordMode}
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>{t.common.cancel}</Button>
@@ -90,31 +110,25 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
         </>
       }
     >
+      <div className="mb-4 flex gap-2">
+        {(['booking', 'record'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cn('flex-1 rounded-lg border px-3 py-2 text-sm transition-colors',
+              mode === m
+                ? 'border-[var(--accent-300)] bg-[var(--accent-50)] font-medium text-[var(--accent-600)]'
+                : 'border-cream-200 text-ink-600 hover:bg-cream-100')}
+          >
+            {m === 'booking' ? t.treatments.booking : t.treatments.recordNow}
+          </button>
+        ))}
+      </div>
+
       {!customerId && (
         <FormRow label={t.treatments.customer} required error={errors.customer}>
-          <Input
-            value={customerQuery}
-            onChange={(e) => setCustomerQuery(e.target.value)}
-            placeholder={t.treatments.searchCustomer}
-            className="mb-2"
-          />
-          <Select
-            value={pickedCustomer}
-            onChange={(e) => setPickedCustomer(e.target.value)}
-            className="w-full"
-            size={6}
-          >
-            {(customers.data ?? [])
-              .filter((c) => {
-                const q = customerQuery.trim().toLowerCase()
-                return !q || c.name.toLowerCase().includes(q) || (c.phone ?? '').includes(q)
-              })
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.phone ? ` · ${c.phone}` : ''}
-                </option>
-              ))}
-          </Select>
+          <CustomerPicker value={pickedCustomer} onChange={setPickedCustomer} error={errors.customer} />
         </FormRow>
       )}
 
@@ -137,34 +151,52 @@ export function TreatmentForm({ open, onClose, onSaved, customerId }: {
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </FormRow>
 
-        <FormRow label={t.form.amount} required hint={t.form.amountHint} error={errors.amount}>
-          <Input value={amount} onChange={(e) => setAmount(e.target.value)}
-                 inputMode="decimal" placeholder="4680" />
-        </FormRow>
-
-        <FormRow label={t.form.paymentMethod}>
-          <Select value={payment} onChange={(e) => setPayment(e.target.value)} className="w-full">
-            <option value="">{t.form.selectPlaceholder}</option>
-            {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </Select>
-        </FormRow>
-
-        <FormRow label={t.form.pigment}>
-          <Input value={pigment} onChange={(e) => setPigment(e.target.value)} placeholder="Areola Mix 2" />
+        <FormRow label={t.treatments.startTime}>
+          <div className="flex gap-2">
+            <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <Select value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+              {DURATIONS.map((d) => (
+                <option key={d} value={d}>{d} {t.treatments.minutes}</option>
+              ))}
+            </Select>
+          </div>
         </FormRow>
       </div>
 
-      <FormRow label={t.form.rating}>
-        <StarRating value={rating} onChange={setRating} />
-      </FormRow>
+      {mode === 'record' && (
+        <>
+          <div className="grid gap-x-4 sm:grid-cols-2">
+            <FormRow label={t.form.amount} required hint={t.form.amountHint} error={errors.amount}>
+              <Input value={amount} onChange={(e) => setAmount(e.target.value)}
+                     inputMode="decimal" placeholder="4680" />
+            </FormRow>
+            <FormRow label={t.form.paymentMethod}>
+              <Select value={payment} onChange={(e) => setPayment(e.target.value)} className="w-full">
+                <option value="">{t.form.selectPlaceholder}</option>
+                {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </Select>
+            </FormRow>
+            <FormRow label={t.form.pigment}>
+              <Input value={pigment} onChange={(e) => setPigment(e.target.value)} placeholder="Areola Mix 2" />
+            </FormRow>
+            <FormRow label={t.form.rating}>
+              <StarRating value={rating} onChange={setRating} />
+            </FormRow>
+          </div>
 
-      <FormRow label={t.form.treatmentRemark}>
-        <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} />
-      </FormRow>
+          <FormRow label={t.form.treatmentRemark}>
+            <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} />
+          </FormRow>
+        </>
+      )}
 
       <div className="flex gap-2 rounded-lg bg-cream-100 px-3 py-2.5 text-xs text-ink-500">
         <Info className="mt-0.5 size-3.5 shrink-0" />
-        <span>{t.form.autoFollowupNote}。{t.form.autoIncomeNote}。</span>
+        <span>
+          {mode === 'booking'
+            ? t.treatments.bookingHint
+            : `${t.form.autoFollowupNote}。${t.form.autoIncomeNote}。`}
+        </span>
       </div>
     </Modal>
   )
