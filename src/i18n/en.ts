@@ -205,6 +205,12 @@ export const en: Dictionary = {
     manualNote: 'Stock only changes through a manual count. Customer purchases do not deduct stock.',
     noChange: 'Quantity unchanged',
     history: 'Stock history',
+    productNote: 'Product note',
+    movementNote: 'Stock-take note',
+    change: 'Change',
+    noHistory: 'No stock movements yet',
+    historyHint: 'Every count, its change and its note',
+    by: 'by',
     empty: 'No products',
   },
 

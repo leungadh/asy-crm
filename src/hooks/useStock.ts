@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { StockLevel, TreatmentRow, FollowupBoardRow } from '@/types/database'
+import type { StockLevel, TreatmentRow, FollowupBoardRow, StockMovement } from '@/types/database'
 
 export function useStockLevels() {
   const [data, setData] = useState<StockLevel[] | null>(null)
@@ -17,7 +17,34 @@ export function useStockLevels() {
     return () => { cancelled = true }
   }, [tick])
 
-  return { data, error, loading: data === null && !error, refetch: () => setTick((n) => n + 1) }
+  return {
+    data, error,
+    loading: data === null && !error,
+    refetch: () => setTick((n) => n + 1),
+    refreshKey: tick,
+  }
+}
+
+/** All movements, newest first. Grouped per product by the Stock page so the
+ *  note recorded during a stock take is actually visible somewhere — it lives
+ *  on stock_movements, not on products. */
+export function useStockMovements(refreshKey: number) {
+  const [rows, setRows] = useState<StockMovement[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('stock_movements')
+      .select('id, product_id, location, delta, reason, note, occurred_on, created_at, staff:staff(display_name)')
+      .order('occurred_on', { ascending: false })
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (!cancelled) setRows((data ?? []) as unknown as StockMovement[])
+      })
+    return () => { cancelled = true }
+  }, [refreshKey])
+
+  return rows
 }
 
 export function useTreatments() {

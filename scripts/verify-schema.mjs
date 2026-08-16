@@ -311,6 +311,28 @@ await check('Both locations settle at their counted values',
 await check('Total is the sum of the two counts',
   `select total_qty::text result from v_stock_levels where code='B2'`, '10')
 
+// ── Stock-take notes are retrievable ──────────────────────────────────────
+console.log('\n════ STOCK MOVEMENT NOTES ════')
+
+const n2 = (await c.query(`select id from products where code='N2'`)).rows[0].id
+await c.query(`
+  insert into stock_movements (product_id, location, delta, reason, note, occurred_on)
+  values ('${n2}','studio', 3, 'purchase_in', '補貨三支，供應商 A', current_date)`)
+
+await check('The note typed during a stock take is stored on the movement',
+  `select note result from stock_movements
+     where product_id='${n2}' and reason='purchase_in' order by created_at desc limit 1`,
+  '補貨三支，供應商 A')
+
+await check('Product note and movement note are genuinely separate fields',
+  `select (
+     (select note from products where id='${n2}') is distinct from
+     (select note from stock_movements where product_id='${n2}' and reason='purchase_in' limit 1)
+   )::text result`, 'true')
+
+await check('Movements are retrievable per product for the history panel',
+  `select (count(*) > 0)::text result from stock_movements where product_id='${n2}'`, 'true')
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

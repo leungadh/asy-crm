@@ -152,3 +152,15 @@ export interface TreatmentRow extends Treatment {
   customer: { id: string; name: string; phone: string | null }
   service: { code: string; name_zh: string; name_en: string; accent: string }
 }
+
+export interface StockMovement {
+  id: string
+  product_id: string
+  location: StockLocation
+  delta: number
+  reason: MovementReason
+  note: string | null
+  occurred_on: string
+  created_at: string
+  staff: { display_name: string } | null
+}

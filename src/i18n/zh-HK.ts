@@ -203,6 +203,12 @@ export const zhHK = {
     manualNote: '存貨只會透過人手盤點更新。客人購買產品不會自動扣減存貨。',
     noChange: '數量沒有變動',
     history: '存貨紀錄',
+    productNote: '產品備註',
+    movementNote: '盤點備註',
+    change: '變動',
+    noHistory: '未有存貨紀錄',
+    historyHint: '每次盤點的變動與備註',
+    by: '由',
     empty: '未有產品',
   },
 
