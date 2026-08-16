@@ -315,6 +315,50 @@ await check('Total is the sum of the two counts',
 // from the inventory UI. products.note and stock_movements.note still exist in
 // the schema, unused, so the feature can be restored without a migration.
 
+// ── Ledger page behaviour ─────────────────────────────────────────────────
+console.log('\n════ LEDGER ════')
+
+await check('Categories seeded for both directions',
+  `select count(*)::text result from ledger_categories where is_active`, '7')
+await check('The two trigger-written categories are marked is_system',
+  `select count(*)::text result from ledger_categories where is_system`, '2')
+await check('Every auto ledger row uses a category that exists in the list',
+  `select count(*)::text result from ledger_entries l
+     where l.is_auto and not exists (
+       select 1 from ledger_categories c
+       where c.name_zh = l.category and c.direction = l.direction)`, '0')
+
+// Manual entry, as LedgerEntryForm writes it
+const manual = (await c.query(`
+  insert into ledger_entries (entry_date, direction, category, item, amount, payment_method, is_auto)
+  values (date_trunc('month', current_date)::date, 'expense', '租金', '測試租金', 9000, 'Bank Transfer', false)
+  returning id`)).rows[0].id
+await check('A manual expense is not flagged auto',
+  `select is_auto::text result from ledger_entries where id='${manual}'`, 'false')
+
+// The delete guard the UI relies on
+const autoRow = (await c.query(`select id from ledger_entries where is_auto limit 1`)).rows[0].id
+await c.query(`delete from ledger_entries where id='${autoRow}' and is_auto = false`)
+await check('Deleting with the is_auto guard cannot remove an auto row',
+  `select count(*)::text result from ledger_entries where id='${autoRow}'`, '1')
+await c.query(`delete from ledger_entries where id='${manual}' and is_auto = false`)
+await check('...but does remove a manual row',
+  `select count(*)::text result from ledger_entries where id='${manual}'`, '0')
+
+// copyPreviousMonthExpenses must copy manual expenses only
+await check('Auto rows are all income, so copying expenses can never duplicate them',
+  `select count(*)::text result from ledger_entries where is_auto and direction <> 'income'`, '0')
+
+// Month bucketing used by the page's stat cards
+await check('Monthly rollup months are unique',
+  `select (count(*) = count(distinct month))::text result from v_monthly_ledger`, 'true')
+await check('Rollup income matches summing entries for that month',
+  `select (
+     (select coalesce(sum(amount),0) from ledger_entries
+        where direction='income' and date_trunc('month', entry_date) = date '2026-03-01')
+     = (select coalesce(income,0) from v_monthly_ledger where month = date '2026-03-01')
+   )::text result`, 'true')
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

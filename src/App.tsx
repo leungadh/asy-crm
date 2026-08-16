@@ -8,6 +8,7 @@ import CustomerList from '@/pages/CustomerList'
 import CustomerDetail from '@/pages/CustomerDetail'
 import Treatments from '@/pages/Treatments'
 import Stock from '@/pages/Stock'
+import Ledger from '@/pages/Ledger'
 import Placeholder from '@/pages/Placeholder'
 
 function Gate() {
@@ -26,7 +27,7 @@ function Gate() {
       <Route path="/treatments" element={<Treatments />} />
       <Route path="/reviews" element={<Placeholder titleKey="reviews" />} />
       <Route path="/stock" element={<Stock />} />
-      <Route path="/ledger" element={<Placeholder titleKey="ledger" />} />
+      <Route path="/ledger" element={<Ledger />} />
       <Route path="/reports" element={<Placeholder titleKey="reports" />} />
       <Route path="/settings" element={<Placeholder titleKey="settings" />} />
       <Route path="*" element={<Navigate to="/customers" replace />} />

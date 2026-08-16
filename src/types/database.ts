@@ -164,3 +164,39 @@ export interface StockMovement {
   created_at: string
   staff: { display_name: string } | null
 }
+
+export interface LedgerCategory {
+  id: string
+  direction: LedgerDirection
+  name_zh: string
+  name_en: string
+  sort_order: number
+  is_system: boolean
+  is_active: boolean
+}
+
+export type LedgerDirection = 'income' | 'expense'
+
+export interface LedgerEntry {
+  id: string
+  entry_date: string
+  direction: LedgerDirection
+  category: string
+  item: string
+  amount: string
+  payment_method: string | null
+  note: string | null
+  customer_id: string | null
+  treatment_id: string | null
+  purchase_id: string | null
+  is_auto: boolean
+  created_at: string
+}
+
+export interface MonthlyLedger {
+  month: string
+  income: string | null
+  expense: string | null
+  net: string
+  entry_count: number
+}
