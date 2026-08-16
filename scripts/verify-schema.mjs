@@ -285,6 +285,32 @@ const spread = (await c.query(`
   group by t.id order by t.treatment_date desc`)).rows
 console.log(`   ↳ busiest client has ${repeat.visits} visits; nodes per visit: ${spread.map(r => r.nodes).join(', ')}`)
 
+// ── Counting both locations in one stock take ─────────────────────────────
+console.log('\n════ TWO-LOCATION STOCK TAKE ════')
+
+const b2 = (await c.query(`select id from products where code='B2'`)).rows[0].id
+const b2Before = (await c.query(`select studio_qty, home_qty from v_stock_levels where code='B2'`)).rows[0]
+
+// Regression guard: counting Home must not be applied against Studio's
+// current quantity. Count Home=10 and Studio unchanged; Studio must not move.
+await c.query(`
+  insert into stock_movements (product_id, location, delta, reason, occurred_on)
+  values ('${b2}','home', ${10 - b2Before.home_qty}, 'stock_take', current_date)`)
+await check('Counting Home does not disturb Studio',
+  `select studio_qty::text result from v_stock_levels where code='B2'`, String(b2Before.studio_qty))
+await check('Home reflects the counted figure',
+  `select home_qty::text result from v_stock_levels where code='B2'`, '10')
+
+// Both locations changed in a single take
+await c.query(`
+  insert into stock_movements (product_id, location, delta, reason, occurred_on)
+  values ('${b2}','studio', ${4 - b2Before.studio_qty}, 'stock_take', current_date),
+         ('${b2}','home',   ${6 - 10}, 'stock_take', current_date)`)
+await check('Both locations settle at their counted values',
+  `select (studio_qty || '/' || home_qty) result from v_stock_levels where code='B2'`, '4/6')
+await check('Total is the sum of the two counts',
+  `select total_qty::text result from v_stock_levels where code='B2'`, '10')
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

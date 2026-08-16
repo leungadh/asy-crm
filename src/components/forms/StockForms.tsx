@@ -12,8 +12,13 @@ import { cn } from '@/lib/utils'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-/** Stock take. The user enters what they COUNTED; we store the difference,
- *  because stock is a movement ledger, not a stored quantity. */
+/** Stock take. The user enters what they COUNTED at each location; we store
+ *  the DIFFERENCE, because stock is a movement ledger, not a stored quantity.
+ *
+ *  Both locations are shown at once deliberately. An earlier version had a
+ *  Studio/Home toggle sharing one input, so a figure typed for one location
+ *  stayed on screen after switching and was silently applied against the
+ *  other location's current quantity. */
 export function StockAdjustForm({ product, onClose, onSaved }: {
   product: StockLevel
   onClose: () => void
@@ -23,26 +28,56 @@ export function StockAdjustForm({ product, onClose, onSaved }: {
   const toast = useToast()
   const { staff } = useAuth()
 
-  const [location, setLocation] = useState<StockLocation>('studio')
-  const [counted, setCounted] = useState('')
+  const current: Record<StockLocation, number> = {
+    studio: product.studio_qty,
+    home: product.home_qty,
+  }
+
+  const [counted, setCounted] = useState<Record<StockLocation, string>>({
+    studio: String(product.studio_qty),
+    home: String(product.home_qty),
+  })
   const [reason, setReason] = useState<MovementReason>('stock_take')
   const [note, setNote] = useState('')
   const [date, setDate] = useState(today())
   const [saving, setSaving] = useState(false)
 
-  const current = location === 'studio' ? product.studio_qty : product.home_qty
-  const countedNum = counted.trim() === '' ? null : Number(counted)
-  const delta = countedNum === null || Number.isNaN(countedNum) ? null : countedNum - current
+  const deltaFor = (loc: StockLocation): number | null => {
+    const raw = counted[loc].trim()
+    if (raw === '') return null
+    const n = Number(raw)
+    if (Number.isNaN(n) || n < 0) return null
+    return n - current[loc]
+  }
+
+  const studioDelta = deltaFor('studio')
+  const homeDelta = deltaFor('home')
+  const invalid = studioDelta === null || homeDelta === null
+  const nothingChanged = studioDelta === 0 && homeDelta === 0
+
+  const newTotal =
+    invalid ? product.total_qty : Number(counted.studio) + Number(counted.home)
 
   async function submit() {
-    if (countedNum === null || Number.isNaN(countedNum) || countedNum < 0) return
+    if (invalid) return
+    if (nothingChanged) { toast(t.stock.noChange); onClose(); return }
+
     setSaving(true)
     try {
-      const res = await recordStockCount({
-        product_id: product.id, location, currentQty: current, countedQty: countedNum,
-        reason, note, occurred_on: date,
-      }, staff?.id)
-      toast(res.changed ? t.form.saved : t.stock.noChange)
+      // One movement per changed location. recordStockCount is a no-op when
+      // the delta is zero, so unchanged locations write nothing.
+      for (const loc of ['studio', 'home'] as StockLocation[]) {
+        await recordStockCount({
+          product_id: product.id,
+          location: loc,
+          currentQty: current[loc],
+          countedQty: Number(counted[loc]),
+          reason,
+          note,
+          occurred_on: date,
+        }, staff?.id)
+      }
+      toast(t.form.saved)
       onSaved()
       onClose()
     } catch (e) {
@@ -61,47 +96,54 @@ export function StockAdjustForm({ product, onClose, onSaved }: {
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>{t.common.cancel}</Button>
-          <Button variant="primary" onClick={submit} disabled={saving || delta === null}>
+          <Button variant="primary" onClick={submit} disabled={saving || invalid}>
             {saving ? t.form.saving : t.common.save}
           </Button>
         </>
       }
     >
-      <FormRow label={t.stock.location} required>
-        <div className="flex gap-2">
-          {(['studio', 'home'] as const).map((loc) => (
-            <button
-              key={loc}
-              type="button"
-              onClick={() => setLocation(loc)}
-              className={cn(
-                'flex-1 rounded-lg border px-3 py-2 text-sm capitalize transition-colors',
-                location === loc
-                  ? 'border-[var(--accent-300)] bg-[var(--accent-50)] font-medium text-[var(--accent-600)]'
-                  : 'border-cream-200 text-ink-600 hover:bg-cream-100',
-              )}
-            >
-              {loc}
-              <span className="ml-1.5 text-xs text-ink-400">
-                {loc === 'studio' ? product.studio_qty : product.home_qty}
-              </span>
-            </button>
-          ))}
-        </div>
-      </FormRow>
+      <p className="mb-4 text-[13px] text-ink-500">{t.stock.countedQty}</p>
 
-      <FormRow label={t.stock.countedQty} required
-               hint={`${t.stock.currentQty}: ${current}`}>
-        <Input value={counted} onChange={(e) => setCounted(e.target.value)}
-               inputMode="numeric" autoFocus placeholder={String(current)} />
-      </FormRow>
+      <div className="grid grid-cols-2 gap-3">
+        {(['studio', 'home'] as StockLocation[]).map((loc) => {
+          const delta = loc === 'studio' ? studioDelta : homeDelta
+          return (
+            <div key={loc} className="rounded-lg border border-cream-200 px-3 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[13px] font-medium capitalize text-ink-700">{loc}</span>
+                <span className="text-xs text-ink-400">
+                  {t.stock.currentQty}: {current[loc]}
+                </span>
+              </div>
+              <Input
+                value={counted[loc]}
+                onChange={(e) => setCounted((c) => ({ ...c, [loc]: e.target.value }))}
+                inputMode="numeric"
+                className="text-right tabular-nums"
+              />
+              <p className={cn('mt-1.5 h-4 text-xs font-medium',
+                delta === null ? 'text-red-600'
+                  : delta > 0 ? 'text-emerald-600'
+                  : delta < 0 ? 'text-red-600'
+                  : 'text-ink-400')}>
+                {delta === null
+                  ? t.form.invalidAmount
+                  : delta === 0
+                    ? t.stock.noChange
+                    : `${t.stock.delta} ${delta > 0 ? '+' : ''}${delta}`}
+              </p>
+            </div>
+          )
+        })}
+      </div>
 
-      {delta !== null && delta !== 0 && (
-        <p className={cn('-mt-2 mb-4 text-sm font-medium',
-          delta > 0 ? 'text-emerald-600' : 'text-red-600')}>
-          {t.stock.delta}: {delta > 0 ? '+' : ''}{delta}
-        </p>
-      )}
+      <p className="mb-4 mt-1 text-right text-[13px] text-ink-500">
+        {t.stock.total}:{' '}
+        <span className="font-semibold text-ink-800 tabular-nums">{invalid ? '—' : newTotal}</span>
+        {!invalid && newTotal !== product.total_qty && (
+          <span className="ml-1 text-ink-400">（{product.total_qty} → {newTotal}）</span>
+        )}
+      </p>
 
       <div className="grid gap-x-4 sm:grid-cols-2">
         <FormRow label={t.stock.reason}>
