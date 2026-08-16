@@ -1,0 +1,68 @@
+# ─── Private / never publish ────────────────────────────────────────────────
+# Contains business answers and personal email addresses
+CLARIFY.md
+
+# Design, architecture and business context — deliberately not published
+DESIGN.md
+PROJECT-NOTES.md
+docs/
+
+# Design reference mockups — keep local, ~8.7 MB
+sample_images/
+
+# Database backups hold real customer data — must never reach GitHub
+backups/
+*.dump
+*.sql.gz
+*.bak
+
+# ─── Secrets ────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.supabase/
+supabase/.temp/
+supabase/.branches/
+
+# ─── Dependencies ───────────────────────────────────────────────────────────
+node_modules
+.pnp
+.pnp.js
+.yarn/
+
+# ─── Build output ───────────────────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+.vite/
+*.local
+
+# ─── Cloudflare ─────────────────────────────────────────────────────────────
+.wrangler/
+.dev.vars
+
+# ─── Logs ───────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Testing ────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Editors / OS ───────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo

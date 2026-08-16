@@ -1,0 +1,147 @@
+// Spins up a throwaway PostgreSQL 18, applies every migration + seed, then
+// asserts the invariants the app depends on. Run with: npm run db:verify
+import EmbeddedPostgres from 'embedded-postgres';
+import { readFileSync, readdirSync } from 'node:fs';
+
+const ROOT = new URL('..', import.meta.url).pathname;
+const MIG  = `${ROOT}supabase/migrations`;
+const SEED = `${ROOT}supabase/seed.sql`;
+
+const pg = new EmbeddedPostgres({
+  databaseDir: '/tmp/asy-verify-db', user: 'postgres', password: 'postgres',
+  port: 54998, persistent: false,
+});
+await pg.initialise();
+await pg.start();
+const c = pg.getPgClient();
+await c.connect();
+
+const fail = (label, e) => { console.log(`\n❌ ${label}\n   ${e.message}`); process.exitCode = 1; };
+
+// pgcrypto must exist before the shim uses gen_random_uuid
+await c.query('create extension if not exists pgcrypto');
+try { await c.query(readFileSync(`${ROOT}scripts/pg-shim.sql`,'utf8')); console.log('✅ shim'); }
+catch (e) { fail('shim', e); await pg.stop(); process.exit(1); }
+
+for (const f of readdirSync(MIG).sort()) {
+  try { await c.query(readFileSync(`${MIG}/${f}`,'utf8')); console.log(`✅ ${f}`); }
+  catch (e) { fail(f, e); await c.end(); await pg.stop(); process.exit(1); }
+}
+
+try { await c.query(readFileSync(SEED,'utf8')); console.log('✅ seed.sql'); }
+catch (e) { fail('seed.sql', e); await c.end(); await pg.stop(); process.exit(1); }
+
+const q = async (label, sql) => {
+  try {
+    const r = await c.query(sql);
+    console.log(`\n── ${label} ──`);
+    console.table(r.rows.slice(0, 12));
+    return r.rows;
+  } catch (e) { fail(label, e); return []; }
+};
+
+await q('Row counts', `
+  select 'customers' t, count(*) n from customers
+  union all select 'treatments', count(*) from treatments
+  union all select 'followup_nodes', count(*) from followup_nodes
+  union all select 'appointments', count(*) from appointments
+  union all select 'customer_purchases', count(*) from customer_purchases
+  union all select 'ledger_entries', count(*) from ledger_entries
+  order by 1`);
+
+await q('Dashboard stats', 'select * from v_dashboard_stats');
+await q('Stock levels (must match mockup)', 'select code, studio_qty, home_qty, total_qty, stock_status from v_stock_levels');
+await q('Follow-up badge distribution', `
+  select display_status, count(*) n from v_followup_board group by 1 order by n desc`);
+await q('Monthly ledger', 'select month, income, expense, net from v_monthly_ledger');
+await q('Service revenue', 'select code, treatment_count, revenue, avg_ticket from v_service_revenue');
+await q('Customer sources', 'select * from v_customer_sources');
+await q('Sample customer summary', `
+  select name, visit_count, lifetime_value, last_visit_date, next_followup_label, next_followup_status
+  from v_customer_summary where visit_count > 0 order by lifetime_value desc nulls last limit 6`);
+
+// ── Integrity checks ───────────────────────────────────────────────────────
+console.log('\n════ INTEGRITY CHECKS ════');
+const check = async (label, sql, expect) => {
+  try {
+    const r = await c.query(sql);
+    const got = r.rows[0]?.result;
+    const ok = String(got) === String(expect);
+    console.log(`${ok ? '✅' : '❌'} ${label} → got ${got}, expected ${expect}`);
+    if (!ok) process.exitCode = 1;
+  } catch (e) { fail(label, e); }
+};
+
+await check('Every treatment has exactly one auto income row',
+  `select count(*)::text result from treatments t
+     where (select count(*) from ledger_entries l where l.treatment_id=t.id) <> 1`, '0');
+await check('Every purchase has exactly one auto income row',
+  `select count(*)::text result from customer_purchases p
+     where (select count(*) from ledger_entries l where l.purchase_id=p.id) <> 1`, '0');
+await check('Areola/VIO treatments each generated 5 follow-up nodes',
+  `select count(*)::text result from treatments t join services s on s.id=t.service_id
+     where s.code in ('areola','vio')
+       and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 5`, '0');
+await check('Lip treatments each generated 3 nodes',
+  `select count(*)::text result from treatments t join services s on s.id=t.service_id
+     where s.code='lip' and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 3`, '0');
+await check('Body treatments each generated 1 node',
+  `select count(*)::text result from treatments t join services s on s.id=t.service_id
+     where s.code='body' and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 1`, '0');
+await check('Only Areola/VIO have review nodes',
+  `select count(*)::text result from followup_nodes n
+     join treatments t on t.id=n.treatment_id join services s on s.id=t.service_id
+     where n.node_type='review' and s.code not in ('areola','vio')`, '0');
+await check('Review nodes all have a booking window',
+  `select count(*)::text result from followup_nodes where node_type='review' and window_end_date is null`, '0');
+await check('Stock total AL1 = 12', `select total_qty::text result from v_stock_levels where code='AL1'`, '12');
+await check('Stock N2 flagged critical', `select stock_status result from v_stock_levels where code='N2'`, 'critical');
+await check('Stock AL2 flagged low', `select stock_status result from v_stock_levels where code='AL2'`, 'low');
+await check('RLS enabled on every table',
+  `select count(*)::text result from pg_tables t
+     where schemaname='public' and not exists (
+       select 1 from pg_class c where c.relname=t.tablename and c.relrowsecurity)`, '0');
+await check('All 8 views are security_invoker',
+  `select count(*)::text result from pg_views v
+     where schemaname='public' and v.viewname like 'v\\_%'
+       and not exists (select 1 from pg_class c where c.relname=v.viewname
+                       and c.reloptions::text like '%security_invoker=on%')`, '0');
+await check('Two staff rows seeded',  `select count(*)::text result from staff`, '2');
+
+// ── Trigger behaviour: editing a treatment must move its income row ────────
+console.log('\n════ TRIGGER BEHAVIOUR ════');
+await c.query(`update treatments set amount = 9999 where id = (select id from treatments limit 1)`);
+await check('Editing treatment amount updates the ledger row',
+  `select l.amount::int::text result from ledger_entries l
+     join treatments t on t.id=l.treatment_id where t.amount=9999 limit 1`, '9999');
+await c.query(`delete from treatments where amount = 9999`);
+await check('Deleting a treatment cascades its ledger row away',
+  `select count(*)::text result from ledger_entries where amount=9999`, '0');
+
+const stockBefore = (await c.query(`select total_qty from v_stock_levels where code='AL1'`)).rows[0].total_qty;
+await c.query(`insert into customer_purchases (customer_id, product_id, quantity, amount)
+               select (select id from customers limit 1), (select id from products where code='AL1'), 3, 1140`);
+const stockAfter = (await c.query(`select total_qty from v_stock_levels where code='AL1'`)).rows[0].total_qty;
+console.log(`${stockBefore === stockAfter ? '✅' : '❌'} A product sale does NOT move stock → ${stockBefore} then ${stockAfter}`);
+if (stockBefore !== stockAfter) process.exitCode = 1;
+
+// ── RLS actually blocks a non-staff user ───────────────────────────────────
+console.log('\n════ RLS ENFORCEMENT ════');
+await c.query(`insert into auth.users (id, email) values
+  ('11111111-1111-1111-1111-111111111111','asybeaute@gmail.com'),
+  ('22222222-2222-2222-2222-222222222222','stranger@example.com')`);
+await c.query(`grant select, insert, update, delete on all tables in schema public to authenticated`);
+
+await c.query(`set role authenticated`);
+await c.query(`select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false)`);
+const staffRows = (await c.query('select count(*)::int n from customers')).rows[0].n;
+await c.query(`select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false)`);
+const strangerRows = (await c.query('select count(*)::int n from customers')).rows[0].n;
+await c.query(`reset role`);
+console.log(`${staffRows > 0 ? '✅' : '❌'} Allowlisted user (Yoyo) sees ${staffRows} customers`);
+console.log(`${strangerRows === 0 ? '✅' : '❌'} Non-allowlisted user sees ${strangerRows} customers`);
+if (staffRows === 0 || strangerRows !== 0) process.exitCode = 1;
+
+await c.end();
+await pg.stop();
+console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');
