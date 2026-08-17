@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Info } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
-import { FormRow, StarRating, Textarea } from '@/components/ui/form'
+import { FormRow, Textarea } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
 import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
@@ -23,7 +23,6 @@ export function CompleteTreatmentForm({ treatment, onClose, onSaved }: {
   const [payment, setPayment] = useState(treatment.payment_method ?? '')
   const [pigment, setPigment] = useState(treatment.pigment_used ?? '')
   const [remark, setRemark] = useState(treatment.remark ?? '')
-  const [rating, setRating] = useState<number | null>(treatment.rating)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -35,7 +34,7 @@ export function CompleteTreatmentForm({ treatment, onClose, onSaved }: {
     try {
       await completeTreatment(treatment.id, {
         amount: amt, payment_method: payment, pigment_used: pigment,
-        remark, rating, treatment_date: date,
+        remark, rating: null, treatment_date: date,
       })
       toast(t.form.saved)
       onSaved()
@@ -86,10 +85,6 @@ export function CompleteTreatmentForm({ treatment, onClose, onSaved }: {
           <Input value={pigment} onChange={(e) => setPigment(e.target.value)} />
         </FormRow>
       </div>
-
-      <FormRow label={t.form.rating}>
-        <StarRating value={rating} onChange={setRating} />
-      </FormRow>
 
       <FormRow label={t.form.treatmentRemark}>
         <Textarea value={remark} onChange={(e) => setRemark(e.target.value)} rows={2} />

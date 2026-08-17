@@ -104,10 +104,9 @@ export default function CustomerDetail() {
             </div>
           </div>
 
-          <div className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 border-cream-200 sm:grid-cols-4 lg:border-l lg:pl-6">
+          <div className="grid flex-1 grid-cols-3 gap-x-6 gap-y-3 border-cream-200 lg:border-l lg:pl-6">
             <Stat label={t.detail.visits} value={String(c.visit_count ?? 0)} />
             <Stat label={t.detail.lifetimeValue} value={formatMoney(c.lifetime_value)} />
-            <Stat label={t.detail.avgRating} value={c.avg_rating ? `${c.avg_rating} ★` : t.common.none} />
             <Stat label={t.customers.columns.status} value={<CustomerStatusBadge status={c.status} />} />
           </div>
 

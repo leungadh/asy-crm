@@ -1,14 +1,20 @@
 // Spins up a throwaway PostgreSQL 18, applies every migration + seed, then
 // asserts the invariants the app depends on. Run with: npm run db:verify
 import EmbeddedPostgres from 'embedded-postgres';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const MIG  = `${ROOT}supabase/migrations`;
 const SEED = `${ROOT}supabase/seed.sql`;
+const DB_DIR = '/tmp/asy-verify-db';
+
+// A previous run killed mid-flight leaves a half-initialised data directory,
+// and initdb then refuses to start. Clear it so the verifier is always
+// re-runnable rather than needing a manual rm.
+rmSync(DB_DIR, { recursive: true, force: true });
 
 const pg = new EmbeddedPostgres({
-  databaseDir: '/tmp/asy-verify-db', user: 'postgres', password: 'postgres',
+  databaseDir: DB_DIR, user: 'postgres', password: 'postgres',
   port: 54998, persistent: false,
 });
 await pg.initialise();
@@ -106,8 +112,14 @@ await check('Only Areola/VIO have review nodes',
 await check('Review nodes all have a booking window',
   `select count(*)::text result from followup_nodes where node_type='review' and window_end_date is null`, '0');
 await check('Stock total AL1 = 12', `select total_qty::text result from v_stock_levels where code='AL1'`, '12');
-await check('Stock N2 flagged critical', `select stock_status result from v_stock_levels where code='N2'`, 'critical');
-await check('Stock AL2 flagged low', `select stock_status result from v_stock_levels where code='AL2'`, 'low');
+await check('N2 (total 3) is 不足 under the <=8 band',
+  `select stock_status result from v_stock_levels where code='N2'`, 'critical');
+await check('AL2 (total 4) is now 不足, not 偏低',
+  `select stock_status result from v_stock_levels where code='AL2'`, 'critical')
+await check('AL1 (total 12) sits in the 偏低 band',
+  `select stock_status result from v_stock_levels where code='AL1'`, 'low')
+await check('P1 (total 15) is still 充足',
+  `select stock_status result from v_stock_levels where code='P1'`, 'ok');
 await check('RLS enabled on every table',
   `select count(*)::text result from pg_tables t
      where schemaname='public' and not exists (
@@ -157,8 +169,8 @@ await c.query(`select set_config('request.jwt.claim.sub','11111111-1111-1111-111
 const catRows = (await c.query(
   `select count(*)::int n from ledger_categories where is_active`)).rows[0].n;
 await c.query(`reset role`);
-console.log(`${catRows === 7 ? '✅' : '❌'} Category dropdown query returns ${catRows} rows as an allowlisted user`);
-if (catRows !== 7) process.exitCode = 1;
+console.log(`${catRows === 8 ? '✅' : '❌'} Category dropdown query returns ${catRows} rows as an allowlisted user`);
+if (catRows !== 8) process.exitCode = 1;
 console.log(`${staffRows > 0 ? '✅' : '❌'} Allowlisted user (Yoyo) sees ${staffRows} customers`);
 console.log(`${strangerRows === 0 ? '✅' : '❌'} Non-allowlisted user sees ${strangerRows} customers`);
 if (staffRows === 0 || strangerRows !== 0) process.exitCode = 1;
@@ -341,7 +353,7 @@ await check('Total is the sum of the two counts',
 console.log('\n════ LEDGER ════')
 
 await check('Categories seeded for both directions',
-  `select count(*)::text result from ledger_categories where is_active`, '7')
+  `select count(*)::text result from ledger_categories where is_active`, '8')
 await check('The two trigger-written categories are marked is_system',
   `select count(*)::text result from ledger_categories where is_system`, '2')
 await check('Every auto ledger row uses a category that exists in the list',
@@ -546,10 +558,11 @@ await check('...and the change actually reaches v_customer_summary',
 await c.query(`update app_settings set value = '90'::jsonb where key = 'dormant_after_days'`)
 
 // Renaming must carry historical ledger rows with it, or the donut splits.
-const rentCat = (await c.query(`select id from ledger_categories where name_zh = '營運費用'`)).rows[0].id
+// 日常用品 since 0014 renamed it from 營運費用.
+const rentCat = (await c.query(`select id from ledger_categories where name_zh = '日常用品'`)).rows[0].id
 const rentBefore = (await c.query(
-  `select count(*)::int n from ledger_entries where category = '營運費用'`)).rows[0].n
-console.log(`   ↳ ${rentBefore} historical rows use 營運費用`)
+  `select count(*)::int n from ledger_entries where category = '日常用品'`)).rows[0].n
+console.log(`   ↳ ${rentBefore} historical rows use 日常用品`)
 
 await c.query(`select rename_ledger_category('${rentCat}', '場地及營運', 'Operating')`)
 await check('Rename updates the category row',
@@ -557,7 +570,7 @@ await check('Rename updates the category row',
 await check('Rename carries historical ledger rows with it',
   `select count(*)::text result from ledger_entries where category = '場地及營運'`, String(rentBefore))
 await check('...leaving nothing behind under the old name',
-  `select count(*)::text result from ledger_entries where category = '營運費用'`, '0')
+  `select count(*)::text result from ledger_entries where category = '日常用品'`, '0')
 
 // System categories are written by triggers as literals and must not move.
 const sysCat = (await c.query(`select id from ledger_categories where is_system limit 1`)).rows[0].id
@@ -594,6 +607,61 @@ try { await c.query(`update user_preferences set theme = 'neon' where staff_id='
 catch { badTheme = true }
 console.log(`${badTheme ? '✅' : '❌'} An unknown theme is rejected by the check constraint`)
 if (!badTheme) process.exitCode = 1
+
+// ── 0014: Combo, payment methods, category reclassification ───────────────
+console.log('\n════ 0014 CHANGES ════')
+
+await check('Combo exists as a service',
+  `select name_en result from services where code = 'combo'`, 'Combo')
+await check('Combo has 5 follow-up rules',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code = 'combo'`, '5')
+await check('Combo\'s 6-week node is a 回診 with a 7-day window',
+  `select (node_type::text || '/' || window_days) result from followup_rules r
+     join services s on s.id = r.service_id
+     where s.code = 'combo' and offset_days = 42`, 'review/7')
+
+// Booking a Combo treatment must produce the same shape as Areola/VIO.
+const ccust = (await c.query(`insert into customers (name) values ('Combo Test') returning id`)).rows[0].id
+const csvc = (await c.query(`select id from services where code='combo'`)).rows[0].id
+const ctx = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${ccust}','${csvc}', current_date, 5000, 'in_progress') returning id`)).rows[0].id
+await check('A completed Combo generates 5 nodes',
+  `select count(*)::text result from followup_nodes where treatment_id='${ctx}'`, '5')
+await check('...one of which is a review',
+  `select count(*)::text result from followup_nodes
+     where treatment_id='${ctx}' and node_type='review'`, '1')
+await c.query(`delete from customers where id='${ccust}'`)
+
+await check('No record still uses the bare FPS label',
+  `select (
+     (select count(*) from treatments where payment_method = 'FPS') +
+     (select count(*) from customer_purchases where payment_method = 'FPS') +
+     (select count(*) from ledger_entries where payment_method = 'FPS')
+   )::text result`, '0')
+await check('FPS - Yoyo is now present on real records',
+  `select (count(*) > 0)::text result from ledger_entries where payment_method = 'FPS - Yoyo'`, 'true')
+
+await check('Old expense category names are gone from the list',
+  `select count(*)::text result from ledger_categories
+     where name_zh in ('材料成本','租金','營運費用')`, '0')
+await check('...and gone from historical ledger rows too',
+  `select count(*)::text result from ledger_entries
+     where category in ('材料成本','租金','營運費用')`, '0')
+await check('Every expense row uses a category that still exists',
+  `select count(*)::text result from ledger_entries l
+     where l.direction = 'expense' and not exists (
+       select 1 from ledger_categories c
+       where c.name_zh = l.category and c.direction = 'expense')`, '0')
+await check('訂金收入 is available as an income category',
+  `select count(*)::text result from ledger_categories
+     where direction='income' and name_zh='訂金收入' and is_active`, '1')
+
+const cats = (await c.query(`
+  select direction, string_agg(name_zh, ', ' order by sort_order) names
+  from ledger_categories where is_active group by direction order by direction`)).rows
+for (const r of cats) console.log(`   ↳ ${r.direction}: ${r.names}`)
 
 await c.end();
 await pg.stop();

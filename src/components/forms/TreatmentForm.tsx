@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Info } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
-import { FormRow, StarRating, Textarea } from '@/components/ui/form'
+import { FormRow, Textarea } from '@/components/ui/form'
 import { Button, Input, Select } from '@/components/ui'
 import { CustomerPicker } from './CustomerPicker'
 import { useToast } from '@/components/ui/toast'
@@ -44,13 +44,12 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
   const [payment, setPayment] = useState('')
   const [pigment, setPigment] = useState('')
   const [remark, setRemark] = useState('')
-  const [rating, setRating] = useState<number | null>(null)
 
   const targetCustomer = customerId ?? pickedCustomer
 
   function reset() {
     setPickedCustomer(''); setServiceId(''); setDetail(''); setAmount('')
-    setPigment(''); setRemark(''); setRating(null); setPayment('')
+    setPigment(''); setRemark(''); setPayment('')
     setDate(today()); setStartTime('11:00'); setDuration(90)
   }
 
@@ -79,7 +78,9 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
         payment_method: mode === 'record' ? payment : undefined,
         pigment_used: mode === 'record' ? pigment : undefined,
         remark: mode === 'record' ? remark : undefined,
-        rating: mode === 'record' ? rating : null,
+        // Ratings were dropped from the UI; the column stays for the
+        // history already recorded.
+        rating: null,
         status: mode === 'record' ? 'in_progress' : 'scheduled',
       }, staff?.id)
 
@@ -178,9 +179,6 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
             </FormRow>
             <FormRow label={t.form.pigment}>
               <Input value={pigment} onChange={(e) => setPigment(e.target.value)} placeholder="Areola Mix 2" />
-            </FormRow>
-            <FormRow label={t.form.rating}>
-              <StarRating value={rating} onChange={setRating} />
             </FormRow>
           </div>
 

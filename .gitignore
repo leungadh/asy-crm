@@ -2,6 +2,9 @@
 # Contains business answers and personal email addresses
 CLARIFY.md
 
+# Change requests: business specifics, staff names, pricing
+modify_*.md
+
 # Design, architecture and business context — deliberately not published
 DESIGN.md
 PROJECT-NOTES.md

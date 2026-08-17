@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, Star, CalendarPlus } from 'lucide-react'
+import { ChevronDown, CalendarPlus } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, EmptyState, type BadgeTone } from '@/components/ui'
 import { NodeStatusBadge } from '@/components/ui/statusBadge'
 import { NodeActions } from '@/components/forms/NodeActions'
@@ -10,6 +10,7 @@ import type { FollowupBoardRow } from '@/types/database'
 
 const accentTone: Record<string, BadgeTone> = {
   rose: 'rose', violet: 'violet', pink: 'pink', amber: 'amber',
+  emerald: 'emerald', sky: 'sky',
 }
 
 export function TreatmentHistory({ treatments, nodes, onChanged }: {
@@ -126,20 +127,9 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
 
               {isOpen && (
                 <div className="bg-cream-50/60 px-5 pb-5 pt-1">
-                  <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-4">
+                  <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-3">
                     <Detail label={t.detail.pigment} value={tx.pigment_used} />
                     <Detail label={t.detail.payment} value={tx.payment_method} />
-                    <Detail
-                      label={t.detail.ratingLabel}
-                      value={
-                        tx.rating ? (
-                          <span className="inline-flex items-center gap-0.5">
-                            {tx.rating}
-                            <Star className="size-3 fill-amber-400 text-amber-400" />
-                          </span>
-                        ) : null
-                      }
-                    />
                     <Detail label={t.customers.columns.status}
                             value={tx.status === 'completed' ? t.treatments.completed : t.treatments.inProgress} />
                   </dl>

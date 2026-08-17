@@ -16,6 +16,7 @@ import type { TreatmentRow } from '@/types/database'
 
 const accentTone: Record<string, BadgeTone> = {
   rose: 'rose', violet: 'violet', pink: 'pink', amber: 'amber',
+  emerald: 'emerald', sky: 'sky',
 }
 
 export default function Treatments() {

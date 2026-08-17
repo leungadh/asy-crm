@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type TextareaHTMLAttributes, type KeyboardEvent } from 'react'
-import { X, Star } from 'lucide-react'
+import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function FormRow({ label, required, hint, error, children, className }: {
@@ -76,26 +76,6 @@ export function TagInput({ value, onChange, placeholder }: {
         placeholder={value.length ? '' : placeholder}
         className="min-w-24 flex-1 bg-transparent text-sm text-ink-700 placeholder:text-ink-400 focus:outline-none"
       />
-    </div>
-  )
-}
-
-export function StarRating({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
-  return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(value === n ? null : n)}
-          className="rounded p-0.5 hover:bg-cream-100"
-          aria-label={`${n}`}
-        >
-          <Star
-            className={cn('size-5', (value ?? 0) >= n ? 'fill-amber-400 text-amber-400' : 'text-cream-200')}
-          />
-        </button>
-      ))}
     </div>
   )
 }

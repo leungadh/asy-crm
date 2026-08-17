@@ -59,7 +59,7 @@ declare
   v_month       int;
   v_count       int;
   i             int;
-  pays          text[] := array['FPS','Cash','PayMe','Bank Transfer','Card'];
+  pays          text[] := array['FPS - Yoyo','FPS - ASY','Cash','PayMe','Bank Transfer','Card'];
   areola_parts  text[] := array['雙側乳暈','乳暈 + 乳柱','單側乳暈','乳暈補色'];
   vio_parts     text[] := array['V+I+O','V+I','VIO 修復','I+O'];
   lip_parts     text[] := array['唇色療程','裸粉唇','霧感唇','唇色補色'];
@@ -227,7 +227,7 @@ select
   p.id,
   q.qty,
   q.qty * 380,
-  'FPS',
+  'FPS - Yoyo',
   (array['studio','home'])[1 + floor(random() * 2)::int]::stock_location,
   t.treatment_date,
   '療程當日購買'
@@ -239,24 +239,24 @@ where random() < 0.3;
 -- ─── Operating expenses ─────────────────────────────────────────────────────
 insert into ledger_entries (entry_date, direction, category, item, amount, payment_method, note, is_auto)
 select
-  make_date(2026, m, 20), 'expense', '營運費用', '租金', 9000, 'Bank Transfer',
+  make_date(2026, m, 20), 'expense', '租金水電', '租金', 9000, 'Bank Transfer',
   to_char(make_date(2026, m, 1), 'MM月') || '租金', false
 from generate_series(1, 8) m;
 
 insert into ledger_entries (entry_date, direction, category, item, amount, payment_method, note, is_auto)
 select
-  make_date(2026, m, 18), 'expense', '營運費用', '管理費', 1762, 'Bank Transfer', '管理服務費', false
+  make_date(2026, m, 18), 'expense', '租金水電', '管理費', 1762, 'Bank Transfer', '管理服務費', false
 from generate_series(1, 8) m;
 
 insert into ledger_entries (entry_date, direction, category, item, amount, payment_method, note, is_auto)
 select
-  make_date(2026, m, 15), 'expense', '材料成本', '色乳材料',
+  make_date(2026, m, 15), 'expense', '材料入貨', '色乳材料',
   (900 + floor(random() * 800))::numeric(10,2), 'Card', '色乳補充', false
 from generate_series(1, 8) m;
 
 insert into ledger_entries (entry_date, direction, category, item, amount, payment_method, note, is_auto)
 select
-  make_date(2026, m, 12), 'expense', '營運費用', '消耗品',
+  make_date(2026, m, 12), 'expense', '日常用品', '消耗品',
   (250 + floor(random() * 300))::numeric(10,2), 'Cash', '手套、針片等', false
 from generate_series(1, 8) m;
 

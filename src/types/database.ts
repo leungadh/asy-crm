@@ -131,8 +131,10 @@ export interface Product {
   unit: string
 }
 
-export const PAYMENT_METHODS = ['FPS', 'Cash', 'PayMe', 'Bank Transfer', 'Card'] as const
-export const CUSTOMER_SOURCES = ['Instagram', '朋友介紹', '舊客介紹', '其他'] as const
+export const PAYMENT_METHODS =
+  ['FPS - Yoyo', 'FPS - ASY', 'Cash', 'PayMe', 'Bank Transfer', 'Card'] as const
+export const CUSTOMER_SOURCES =
+  ['Instagram', 'Follower', '朋友介紹', '舊客介紹', '其他'] as const
 
 export interface StockLevel {
   id: string
