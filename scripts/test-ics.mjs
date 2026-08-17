@@ -1,6 +1,6 @@
 // Validates the .ics output against the parts of RFC 5545 that actually break
 // calendar clients. Run: npm run test:ics
-import { buildIcs, foldLine } from '../functions/_lib/ics.ts'
+import { buildIcs, foldLine } from '../worker/ics.ts'
 
 let failures = 0
 const check = (label, actual, expected) => {

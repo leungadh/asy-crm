@@ -1,6 +1,7 @@
-import { buildIcs, type IcsEvent } from '../_lib/ics'
+import { buildIcs, type IcsEvent } from './ics'
 
-interface Env {
+export interface Env {
+  ASSETS: Fetcher
   SUPABASE_URL: string
   /** Server-side only. Never exposed to the browser, never committed. */
   SUPABASE_SERVICE_ROLE_KEY: string
@@ -30,10 +31,10 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ params, request, env }) => {
-  const token = String(params.token ?? '').replace(/\.ics$/, '')
-
+async function calendarFeed(request: Request, env: Env, token: string): Promise<Response> {
   if (!env.ICS_TOKEN || !safeEqual(token, env.ICS_TOKEN)) {
+    // Same response as any unknown path, so the endpoint's existence is not
+    // confirmed to someone guessing.
     return new Response('Not found', { status: 404 })
   }
 
@@ -57,9 +58,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ params, request, env })
     },
   })
 
-  if (!res.ok) {
-    return new Response(`Upstream error: ${res.status}`, { status: 502 })
-  }
+  if (!res.ok) return new Response(`Upstream error: ${res.status}`, { status: 502 })
 
   const rows = (await res.json()) as CalendarRow[]
 
@@ -98,10 +97,28 @@ export const onRequestGet: PagesFunction<Env> = async ({ params, request, env })
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': 'inline; filename="asy-beaute.ics"',
-      // Google refetches on its own schedule regardless; this stops any proxy
-      // in between serving a stale copy for longer.
       'Cache-Control': 'public, max-age=900',
       'X-Robots-Tag': 'noindex, nofollow',
     },
   })
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url)
+
+    // run_worker_first in wrangler.toml means only /calendar/* reaches here
+    // ahead of the assets; everything else is served directly.
+    const match = url.pathname.match(/^\/calendar\/([^/]+?)(?:\.ics)?$/)
+    if (match) {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405 })
+      }
+      return calendarFeed(request, env, match[1])
+    }
+
+    // Defensive: if routing ever changes, fall back to the static assets
+    // rather than returning nothing.
+    return env.ASSETS.fetch(request)
+  },
 }

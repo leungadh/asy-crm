@@ -1,12 +1,26 @@
-# Cloudflare Pages configuration.
+# Cloudflare Worker with static assets.
 #
-# Secrets are NOT set here — they are configured in the Pages dashboard under
-# Settings > Environment variables, and marked as encrypted:
+# Secrets are NOT set here. They live in the dashboard under
+# Settings > Variables and Secrets, marked as encrypted:
 #
-#   SUPABASE_URL                the production project URL
+#   SUPABASE_URL                the project URL
 #   SUPABASE_SERVICE_ROLE_KEY   server-side only, never in the repo
 #   ICS_TOKEN                   long random string guarding the calendar feed
 #
 name = "asy-crm"
+main = "worker/index.ts"
 compatibility_date = "2026-08-16"
-pages_build_output_dir = "dist"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# Serves index.html for any path that is not a real file, so refreshing on a
+# deep link like /customers/<id> works. This replaces the _redirects file that
+# Pages used; Workers handles it natively.
+not_found_handling = "single-page-application"
+
+# ...but SPA handling would swallow the calendar feed too, since /calendar/x.ics
+# is not a real file either. Listing it here makes the Worker run first for
+# that path only. Everything else is served straight from assets.
+run_worker_first = ["/calendar/*"]
