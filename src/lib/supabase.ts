@@ -9,6 +9,16 @@ if (!url || !anonKey) {
   )
 }
 
+if (typeof window !== 'undefined'
+    && window.location.protocol === 'https:'
+    && url.startsWith('http://')) {
+  throw new Error(
+    `VITE_SUPABASE_URL is http:// but this page is https://. The browser blocks ` +
+    `that as mixed content and every request fails with "Failed to fetch". ` +
+    `Change it to https:// in Cloudflare and redeploy. Current value: ${url}`,
+  )
+}
+
 /** Only ever the anon key here. RLS + the staff allowlist do the real work. */
 export const supabase = createClient(url, anonKey, {
   auth: {

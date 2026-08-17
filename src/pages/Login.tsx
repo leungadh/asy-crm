@@ -26,11 +26,15 @@ export default function Login() {
   const [friendly, setFriendly] = useState('')
   const [detail, setDetail] = useState('')
 
-  // Which project the browser bundle is actually pointing at. A wrong or stale
-  // value here looks exactly like a login problem, and is otherwise invisible.
-  const host = (() => {
-    try { return new URL(import.meta.env.VITE_SUPABASE_URL).host } catch { return 'not configured' }
-  })()
+  // What the bundle is actually pointing at. Showing only the host hid a
+  // scheme mismatch: http:// on an https:// page is blocked as mixed content
+  // and surfaces only as "Failed to fetch". Both values ship in the client
+  // bundle anyway, so displaying them reveals nothing new.
+  const rawUrl = import.meta.env.VITE_SUPABASE_URL ?? '(unset)'
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
+  const keyHint = key
+    ? `${key.slice(0, 6)}…${key.slice(-4)} (${key.length} chars)`
+    : '(unset)'
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -96,8 +100,10 @@ export default function Login() {
           </form>
         )}
 
-        <p className="mt-6 text-center text-[11px] text-ink-300">
-          {t.auth.connectedTo} {host}
+        <p className="mt-6 break-all text-center text-[11px] text-ink-300">
+          {t.auth.connectedTo} {rawUrl}
+          <br />
+          key {keyHint}
         </p>
       </Card>
     </div>
