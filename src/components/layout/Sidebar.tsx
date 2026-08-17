@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, CalendarDays, ClipboardList,
+  Users, CalendarDays, ClipboardList,
   Package, CircleDollarSign, BarChart3, Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -11,9 +11,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n()
 
   const items = [
-    { to: '/',           icon: LayoutDashboard,   label: t.nav.dashboard },
-    { to: '/customers',  icon: Users,             label: t.nav.customers },
     { to: '/calendar',   icon: CalendarDays,      label: t.nav.calendar },
+    { to: '/customers',  icon: Users,             label: t.nav.customers },
     { to: '/treatments', icon: ClipboardList,     label: t.nav.treatments },
     { to: '/stock',      icon: Package,           label: t.nav.stock },
     { to: '/ledger',     icon: CircleDollarSign,  label: t.nav.ledger },
@@ -30,7 +29,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
         {items.map(({ to, icon: Icon, label }) => (
           <NavLink
-            key={to} to={to} end={to === '/'} onClick={onNavigate}
+            key={to} to={to} onClick={onNavigate}
             className={({ isActive }) =>
               cn('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
                 isActive

@@ -3,7 +3,6 @@ export const zhHK = {
     motto: '用心對待每一位客人，讓美麗與專業同行。' },
 
   nav: {
-    dashboard: 'Dashboard',
     customers: '客人列表',
     calendar: '日曆 / 跟進日程',
     treatments: '療程記錄',

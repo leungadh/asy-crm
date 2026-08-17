@@ -5,7 +5,6 @@ export const en: Dictionary = {
     motto: 'Every client, cared for. Beauty and professionalism, together.' },
 
   nav: {
-    dashboard: 'Dashboard',
     customers: 'Customers',
     calendar: 'Calendar / Follow-ups',
     treatments: 'Treatment Records',
