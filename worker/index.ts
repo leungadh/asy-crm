@@ -32,9 +32,22 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 async function calendarFeed(request: Request, env: Env, token: string): Promise<Response> {
-  if (!env.ICS_TOKEN || !safeEqual(token, env.ICS_TOKEN)) {
-    // Same response as any unknown path, so the endpoint's existence is not
-    // confirmed to someone guessing.
+  // Trim both sides. `openssl rand -hex 32` emits 64 characters plus a
+  // newline, and pasting that into a dashboard field stores 65 — which fails
+  // the length check with no way to see why, since secrets are write-only.
+  const expected = (env.ICS_TOKEN ?? '').trim()
+  const supplied = token.trim()
+
+  if (!expected || !safeEqual(supplied, expected)) {
+    // The response is identical either way, so the endpoint's existence is not
+    // confirmed to someone guessing. The log distinguishes them, because
+    // "not configured" and "wrong token" need completely different fixes and
+    // are otherwise indistinguishable from outside.
+    console.log(
+      expected
+        ? `calendar: token mismatch (supplied ${supplied.length} chars, expected ${expected.length})`
+        : 'calendar: ICS_TOKEN is not configured on this Worker',
+    )
     return new Response('Not found', { status: 404 })
   }
 
