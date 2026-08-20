@@ -148,12 +148,33 @@ MSG
 fi
 rm -f "$ERRLOG"
 
-SIZE=$(du -h "$OUT" | cut -f1)
-ROWS=$(grep -c '^INSERT\|^COPY' "$OUT" 2>/dev/null || echo '?')
+SIZE=$(ls -lh "$OUT" | awk '{print $5}')
 
 echo
-echo "Wrote $OUT ($SIZE, $ROWS data statements)"
+echo "Wrote $OUT ($SIZE)"
 echo
-ls -lh backups | tail -5
+
+# pg_dump emits one COPY block per table with every row inside it, so counting
+# statements says nothing about whether data actually came down. Count the rows
+# between each COPY and its terminating backslash-dot instead — that is the
+# number worth seeing.
+awk '
+  /^COPY /   { t=$2; sub(/^public\./, "", t); n=0; inblock=1; next }
+  inblock && /^\\\.$/ { printf "  %-22s %6d\n", t, n; inblock=0; next }
+  inblock    { n++ }
+' "$OUT" | sort -k2 -rn
+
+TOTAL=$(awk '/^COPY /{i=1;next} /^\\\.$/{i=0} i{n++} END{print n+0}' "$OUT")
+echo
+echo "  total rows: $TOTAL"
+
+if [ "$TOTAL" -eq 0 ]; then
+  echo
+  echo "WARNING: the dump contains no rows. It connected, but nothing came back." >&2
+  echo "Check you are pointed at the right project before relying on this file." >&2
+  exit 1
+fi
+
 echo
 echo "Reminder: keep a copy somewhere other than this MacBook."
+echo "A backup that only exists on the machine being backed up is not a backup."
