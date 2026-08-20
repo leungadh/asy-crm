@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#
+# Dumps the Supabase database using pg_dump directly.
+#
+# `supabase db dump` runs pg_dump inside a Docker container to guarantee a
+# version match. That means installing Docker Desktop just to take a backup,
+# which is a lot of machinery for one command. Calling pg_dump ourselves needs
+# only the Postgres client tools (~50 MB via `brew install libpq`).
+#
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# Homebrew keeps libpq keg-only, so pg_dump is usually not on PATH.
+if ! command -v pg_dump >/dev/null 2>&1; then
+  for candidate in /opt/homebrew/opt/libpq/bin /usr/local/opt/libpq/bin; do
+    [ -x "$candidate/pg_dump" ] && export PATH="$candidate:$PATH" && break
+  done
+fi
+
+if ! command -v pg_dump >/dev/null 2>&1; then
+  cat <<'MSG' >&2
+pg_dump not found.
+
+Install the Postgres client tools (no Docker, no Postgres server needed):
+
+    brew install libpq
+    echo 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"' >> ~/.zshrc
+    source ~/.zshrc
+
+MSG
+  exit 1
+fi
+
+# The connection string lives in .env.local, which is git-ignored. It contains
+# the database password, so it must never be committed or passed on the command
+# line where it would land in shell history.
+if [ -f .env.local ]; then
+  set -a; . ./.env.local; set +a
+fi
+
+if [ -z "${SUPABASE_DB_URL:-}" ]; then
+  cat <<'MSG' >&2
+SUPABASE_DB_URL is not set.
+
+Supabase dashboard -> Project Settings -> Database -> Connection string -> URI,
+then add this line to .env.local:
+
+    SUPABASE_DB_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+
+Use the SESSION POOLER on port 5432. Two traps:
+  * The direct connection (db.<ref>.supabase.co) is IPv6-only on the free tier
+    and will simply time out on most home networks.
+  * The TRANSACTION pooler on port 6543 breaks pg_dump's COPY protocol — it
+    hangs or fails with a protocol error rather than saying anything useful.
+
+MSG
+  exit 1
+fi
+
+case "$SUPABASE_DB_URL" in
+  *:6543/*)
+    echo "Refusing to run: that is the transaction pooler (port 6543)." >&2
+    echo "pg_dump needs the session pooler on port 5432." >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p backups
+OUT="backups/asy-$(date +%Y%m%d-%H%M).sql"
+
+echo "Dumping data to $OUT ..."
+
+# --data-only: the schema lives in supabase/migrations and in git. Dumping both
+#   would create two sources of truth for the structure.
+# --no-owner / --no-privileges: role names differ between projects, and keeping
+#   them makes the dump fail to restore anywhere else.
+pg_dump "$SUPABASE_DB_URL" \
+  --data-only \
+  --no-owner \
+  --no-privileges \
+  --exclude-schema='auth|storage|graphql|graphql_public|realtime|supabase_functions|extensions|vault|pgbouncer|net|cron' \
+  --file "$OUT"
+
+SIZE=$(du -h "$OUT" | cut -f1)
+ROWS=$(grep -c '^INSERT\|^COPY' "$OUT" 2>/dev/null || echo '?')
+
+echo
+echo "Wrote $OUT ($SIZE, $ROWS data statements)"
+echo
+ls -lh backups | tail -5
+echo
+echo "Reminder: keep a copy somewhere other than this MacBook."

@@ -13,9 +13,8 @@
     "db:verify": "node scripts/verify-schema.mjs",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
-    "db:backup": "mkdir -p backups && supabase db dump --linked --data-only -f backups/asy-$(date +%Y%m%d-%H%M).sql && ls -lh backups | tail -3",
-    "test:ics": "node --experimental-strip-types scripts/test-ics.mjs",
-    "db:backup:schema": "mkdir -p backups && supabase db dump --linked -f backups/schema-$(date +%Y%m%d).sql"
+    "db:backup": "bash scripts/backup.sh",
+    "test:ics": "node --experimental-strip-types scripts/test-ics.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
