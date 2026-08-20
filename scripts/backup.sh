@@ -43,7 +43,7 @@ if [ -z "${SUPABASE_DB_URL:-}" ]; then
   cat <<'MSG' >&2
 SUPABASE_DB_URL is not set.
 
-Supabase dashboard -> Project Settings -> Database -> Connection string -> URI,
+Click Connect at the top of the Supabase dashboard, choose the Session pooler tab,
 then add this line to .env.local:
 
     SUPABASE_DB_URL="postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
