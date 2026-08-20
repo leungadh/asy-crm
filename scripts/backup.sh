@@ -75,12 +75,78 @@ echo "Dumping data to $OUT ..."
 #   would create two sources of truth for the structure.
 # --no-owner / --no-privileges: role names differ between projects, and keeping
 #   them makes the dump fail to restore anywhere else.
-pg_dump "$SUPABASE_DB_URL" \
+# Capture stderr so a failure can be explained rather than left as a raw
+# Postgres message, which rarely names the actual cause.
+ERRLOG=$(mktemp)
+if ! pg_dump "$SUPABASE_DB_URL" \
   --data-only \
   --no-owner \
   --no-privileges \
   --exclude-schema='auth|storage|graphql|graphql_public|realtime|supabase_functions|extensions|vault|pgbouncer|net|cron' \
-  --file "$OUT"
+  --file "$OUT" 2>"$ERRLOG"
+then
+  ERR=$(cat "$ERRLOG")
+  rm -f "$ERRLOG" "$OUT"
+  echo "$ERR" >&2
+  echo >&2
+
+  case "$ERR" in
+    *"Tenant or user not found"*|*"tenant/user"*|*ENOTFOUND*)
+      cat >&2 <<'MSG'
+--------------------------------------------------------------------
+The pooler could not find your project on that host.
+
+The project ref is embedded in the USERNAME (postgres.<ref>), and the
+region is in the HOSTNAME. Both must match, and the region prefix
+differs per project (aws-0 / aws-1 / etc).
+
+Copy the string verbatim from the Supabase dashboard rather than
+editing an example: click Connect at the top, choose Session pooler,
+and change only [YOUR-PASSWORD].
+--------------------------------------------------------------------
+MSG
+      ;;
+    *"password authentication failed"*)
+      cat >&2 <<'MSG'
+--------------------------------------------------------------------
+Wrong database password.
+
+This is NOT your Supabase account password, nor any API key. It is the
+database password set when the project was created. If you do not have
+it: Project Settings -> Database -> Reset database password. Nothing in
+the app uses it, so resetting is safe.
+
+Special characters must be percent-encoded in a URL: @ becomes %40,
+# becomes %23, / becomes %2F.
+--------------------------------------------------------------------
+MSG
+      ;;
+    *"timeout"*|*"could not connect"*|*"No route to host"*|*"Network is unreachable"*)
+      cat >&2 <<'MSG'
+--------------------------------------------------------------------
+Could not reach the server.
+
+The most likely cause is the DIRECT connection string, which is
+IPv6-only on the free tier and simply times out on most home networks.
+The host must contain "pooler.supabase.com", not "db.<ref>.supabase.co".
+--------------------------------------------------------------------
+MSG
+      ;;
+    *"server version"*|*"aborting because of server version mismatch"*)
+      cat >&2 <<'MSG'
+--------------------------------------------------------------------
+pg_dump is older than the server.
+
+    brew upgrade libpq
+
+Then confirm the newer one is first on PATH: pg_dump --version
+--------------------------------------------------------------------
+MSG
+      ;;
+  esac
+  exit 1
+fi
+rm -f "$ERRLOG"
 
 SIZE=$(du -h "$OUT" | cut -f1)
 ROWS=$(grep -c '^INSERT\|^COPY' "$OUT" 2>/dev/null || echo '?')
