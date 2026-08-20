@@ -11,6 +11,12 @@ name = "asy-crm"
 main = "worker/index.ts"
 compatibility_date = "2026-08-16"
 
+# Keep-alive. Supabase pauses a free project after 7 days without API traffic,
+# and a paused project stops resolving — the app simply dies until someone
+# notices and clicks Restore. 02:00 UTC is 10:00 Hong Kong.
+[triggers]
+crons = ["0 2 * * *"]
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"

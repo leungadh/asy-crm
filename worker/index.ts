@@ -103,7 +103,36 @@ async function calendarFeed(request: Request, env: Env, token: string): Promise<
   })
 }
 
+/** Supabase pauses a free project after 7 days of no API traffic. Yoyo using
+ *  the app daily prevents that on its own, but a holiday or a quiet spell
+ *  would not — and the failure is silent until someone tries to sign in.
+ *
+ *  A single cheap read is enough to count as activity. */
+async function keepAlive(env: Env): Promise<void> {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/app_settings?select=key&limit=1`,
+    {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    },
+  )
+
+  // Logged rather than thrown: a failed ping is worth seeing in `wrangler tail`
+  // but must not retry aggressively or mark the schedule as failing.
+  if (res.ok) {
+    console.log('keep-alive ok')
+  } else {
+    console.error(`keep-alive failed: ${res.status} ${await res.text()}`)
+  }
+}
+
 export default {
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(keepAlive(env))
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
