@@ -175,6 +175,38 @@ if [ "$TOTAL" -eq 0 ]; then
   exit 1
 fi
 
-echo
-echo "Reminder: keep a copy somewhere other than this MacBook."
-echo "A backup that only exists on the machine being backed up is not a backup."
+# ─── Copy off the machine ─────────────────────────────────────────────────
+# The step most likely to be skipped, so it should not be a separate action.
+# Set BACKUP_COPY_TO in .env.local to a cloud-synced folder, e.g.
+#   BACKUP_COPY_TO="$HOME/Library/Mobile Documents/com~apple~CloudDocs/asy-backups"
+if [ -n "${BACKUP_COPY_TO:-}" ]; then
+  if mkdir -p "$BACKUP_COPY_TO" 2>/dev/null && cp "$OUT" "$BACKUP_COPY_TO/"; then
+    echo
+    echo "  copied to $BACKUP_COPY_TO"
+  else
+    echo >&2
+    echo "WARNING: could not copy to $BACKUP_COPY_TO" >&2
+    echo "The local backup is fine, but it is still only on this machine." >&2
+  fi
+else
+  echo
+  echo "  BACKUP_COPY_TO is not set, so this backup exists only on this Mac."
+  echo "  Add a cloud-synced folder to .env.local to copy it automatically:"
+  echo
+  for candidate in \
+    "$HOME/Library/Mobile Documents/com~apple~CloudDocs" \
+    "$HOME/Library/CloudStorage"; do
+    [ -d "$candidate" ] && echo "    BACKUP_COPY_TO=\"$candidate/asy-backups\""
+  done
+fi
+
+# ─── History ──────────────────────────────────────────────────────────────
+COUNT=$(ls -1 backups/*.sql 2>/dev/null | wc -l | tr -d ' ')
+if [ "$COUNT" -gt 1 ]; then
+  echo
+  echo "  $COUNT local backups, oldest $(ls -1t backups/*.sql | tail -1 | xargs basename)"
+  if [ "$COUNT" -gt 12 ]; then
+    echo "  Over 12 kept locally. Delete the oldest if you want, but only once"
+    echo "  you have confirmed the cloud copies exist."
+  fi
+fi
