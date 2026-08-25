@@ -14,7 +14,8 @@
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
     "db:backup": "bash scripts/backup.sh",
-    "test:ics": "node --experimental-strip-types scripts/test-ics.mjs"
+    "test:ics": "node --experimental-strip-types scripts/test-ics.mjs",
+    "db:restore": "bash scripts/restore.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
