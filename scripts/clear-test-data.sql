@@ -23,11 +23,6 @@
 
 begin;
 
--- ─── SAFETY STOP ──────────────────────────────────────────────────────────
--- Delete this block to run the script. It exists because a row count cannot
--- tell seed data from real data — the seed itself creates ~96 treatments — so
--- any automatic guard would either block the legitimate use or fail to stop
--- the dangerous one. An edit you have to make by hand is the honest version.
 do $$
 begin
   raise exception
