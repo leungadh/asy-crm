@@ -23,12 +23,30 @@
 
 begin;
 
+-- ═══════════════════════════════════════════════════════════════════════════
+--  TO RUN THIS SCRIPT: delete the two dashes at the start of the next line.
+--  That is the only edit needed. Nothing else in this file should be changed.
+
+-- set local asy.confirm_clear = 'yes';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+--  Why a manual edit rather than an automatic guard: a row count cannot tell
+--  seed data from real data, so any threshold would either block the
+--  legitimate use or fail to stop the dangerous one.
+--
+--  The previous version asked you to delete a whole block, which turned out to
+--  be ambiguous once the descriptive comment above it was gone — leaving the
+--  executable part behind, still armed. One line, clearly marked, cannot be
+--  half-done.
+
 do $$
 begin
-  raise exception
-    'Safety stop. Open scripts/clear-test-data.sql, delete the SAFETY STOP block, and re-run. This erases every customer, treatment, booking, ledger entry and stock movement in the database you are currently connected to.';
+  if coalesce(current_setting('asy.confirm_clear', true), '') <> 'yes' then
+    raise exception
+      'Not confirmed. Open scripts/clear-test-data.sql and uncomment the single line marked "TO RUN THIS SCRIPT", then run it again. This erases every customer, treatment, booking, ledger entry and stock movement in the database you are currently connected to.';
+  end if;
 end $$;
--- ──────────────────────────────────────────────────────────────────────────
 
 delete from stock_movements;
 delete from ledger_entries;      -- manual expenses too; auto rows cascade anyway
