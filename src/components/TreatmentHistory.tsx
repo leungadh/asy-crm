@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, CalendarPlus } from 'lucide-react'
+import { ChevronDown, CalendarPlus, CalendarClock, AlertTriangle } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, EmptyState, type BadgeTone } from '@/components/ui'
 import { NodeStatusBadge } from '@/components/ui/statusBadge'
 import { NodeActions } from '@/components/forms/NodeActions'
@@ -13,8 +13,26 @@ const accentTone: Record<string, BadgeTone> = {
   emerald: 'emerald', sky: 'sky',
 }
 
-export function TreatmentHistory({ treatments, nodes, onChanged }: {
+/** One row in the 即將到來 band. Scheduled treatments and 回診 appointments live
+ *  in different tables with different shapes, so they are normalised to this
+ *  before being merged — otherwise the sort and the markup both fork. */
+interface UpcomingRow {
+  id: string
+  kind: 'treatment' | 'review'
+  /** Sort key. Local-time ISO so a date without a time still orders sensibly. */
+  sortAt: string
+  date: string
+  time: string | null
+  serviceName: string | null
+  accent: string | null
+  detail: string | null
+  /** The booked time is in the past but nothing has closed the booking off. */
+  overdue: boolean
+}
+
+export function TreatmentHistory({ treatments, appointments, nodes, onChanged }: {
   treatments: CustomerDetailData['treatments']
+  appointments: CustomerDetailData['appointments']
   nodes: FollowupBoardRow[]
   onChanged: () => void
 }) {
@@ -33,9 +51,55 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
     return map
   }, [nodes])
 
+  // A booking is not a visit. Keeping the two apart matters for more than
+  // layout: visit numbering, the (n) count and "newest visit" all become wrong
+  // the moment a future booking is allowed into the list.
+  const past = useMemo(
+    () => treatments.filter((tx) => tx.status !== 'scheduled'),
+    [treatments],
+  )
+
+  const upcoming = useMemo<UpcomingRow[]>(() => {
+    const now = new Date()
+    const today = toLocalDate(now)
+
+    const rows: UpcomingRow[] = treatments
+      .filter((tx) => tx.status === 'scheduled')
+      .map((tx) => ({
+        id: tx.id,
+        kind: 'treatment' as const,
+        sortAt: `${tx.treatment_date}T${tx.start_time ?? '00:00'}`,
+        date: tx.treatment_date,
+        time: tx.start_time ? tx.start_time.slice(0, 5) : null,
+        serviceName: locale === 'en' ? tx.service.name_en : tx.service.name_zh,
+        accent: tx.service.accent,
+        detail: tx.detail,
+        overdue: tx.treatment_date < today,
+      }))
+
+    for (const a of appointments) {
+      const d = new Date(a.starts_at)
+      rows.push({
+        id: a.id,
+        kind: 'review',
+        sortAt: `${toLocalDate(d)}T${toLocalTime(d)}`,
+        date: toLocalDate(d),
+        time: toLocalTime(d),
+        serviceName: a.service
+          ? (locale === 'en' ? a.service.name_en : a.service.name_zh)
+          : null,
+        accent: a.service?.accent ?? null,
+        detail: a.notes,
+        overdue: d.getTime() < now.getTime(),
+      })
+    }
+
+    return rows.sort((x, y) => x.sortAt.localeCompare(y.sortAt))
+  }, [treatments, appointments, locale])
+
   // Newest visit open by default; the rest collapsed.
   const [open, setOpen] = useState<Set<string>>(
-    () => new Set(treatments.length ? [treatments[0].id] : []),
+    () => new Set(past.length ? [past[0].id] : []),
   )
 
   const toggle = (id: string) =>
@@ -45,9 +109,9 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
       return next
     })
 
-  const allOpen = open.size === treatments.length && treatments.length > 0
+  const allOpen = open.size === past.length && past.length > 0
 
-  if (treatments.length === 0) {
+  if (past.length === 0 && upcoming.length === 0) {
     return (
       <Card>
         <CardHeader title={t.detail.history} />
@@ -63,29 +127,86 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
           <span>
             {t.detail.history}
             <span className="ml-2 text-xs font-normal text-ink-400">
-              （{treatments.length}）
+              （{past.length}）
             </span>
           </span>
         }
         action={
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setOpen(allOpen ? new Set() : new Set(treatments.map((x) => x.id)))}
-          >
-            {allOpen ? t.detail.collapseAll : t.detail.expandAll}
-          </Button>
+          past.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setOpen(allOpen ? new Set() : new Set(past.map((x) => x.id)))}
+            >
+              {allOpen ? t.detail.collapseAll : t.detail.expandAll}
+            </Button>
+          )
         }
       />
 
+      {/* ── 即將到來 ───────────────────────────────────────────────────────
+          Pinned above the history, tinted differently, and outside the <ul>
+          below so it takes no visit number and no place in the count. */}
+      {upcoming.length > 0 && (
+        <div className="border-b border-cream-200 bg-[var(--accent-50,theme(colors.rose.50))]/70 px-5 py-3.5">
+          <p className="mb-2.5 flex items-center gap-1.5 text-xs font-medium text-ink-500">
+            <CalendarClock className="size-3.5" />
+            {t.detail.upcoming}
+            <span className="font-normal text-ink-400">· {t.detail.upcomingHint}</span>
+          </p>
+
+          <ul className="space-y-2">
+            {upcoming.map((u) => (
+              <li
+                key={`${u.kind}-${u.id}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-cream-200 bg-white px-3.5 py-2.5"
+              >
+                <span className="whitespace-nowrap text-sm font-medium text-ink-700">
+                  {u.date}
+                </span>
+                <span className="whitespace-nowrap text-[13px] text-ink-500">
+                  {u.time ?? t.detail.noTimeSet}
+                </span>
+
+                <Badge tone={u.kind === 'review' ? 'violet' : 'sky'}>
+                  {u.kind === 'review' ? t.detail.apptReview : t.detail.apptTreatment}
+                </Badge>
+
+                {u.serviceName && (
+                  <Badge tone={accentTone[u.accent ?? ''] ?? 'slate'}>{u.serviceName}</Badge>
+                )}
+
+                {u.detail && (
+                  <span className="truncate text-[13px] text-ink-500">{u.detail}</span>
+                )}
+
+                <span className="ml-auto flex items-center gap-2">
+                  {u.overdue && (
+                    <span className="flex items-center gap-1 whitespace-nowrap text-xs text-amber-700">
+                      <AlertTriangle className="size-3.5" />
+                      {t.detail.apptPassed}
+                    </span>
+                  )}
+                  {u.kind === 'treatment' && (
+                    <span className="whitespace-nowrap text-xs text-ink-400">
+                      {t.detail.amountPending}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <ul className="divide-y divide-cream-200">
-        {treatments.map((tx, idx) => {
+        {past.map((tx, idx) => {
           const isOpen = open.has(tx.id)
           const txNodes = nodesByTreatment.get(tx.id) ?? []
           const done = txNodes.filter(
             (n) => n.display_status === 'done' || n.display_status === 'skipped',
           ).length
-          const visitNo = treatments.length - idx   // oldest visit is #1
+          const visitNo = past.length - idx   // oldest visit is #1
           const review = txNodes.find((n) => n.node_type === 'review')
 
           return (
@@ -120,7 +241,7 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
                     </span>
                   )}
                   <span className="whitespace-nowrap text-sm font-semibold text-ink-800">
-                    {formatMoney(tx.amount)}
+                    {tx.amount === null ? t.detail.amountPending : formatMoney(tx.amount)}
                   </span>
                 </div>
               </button>
@@ -130,8 +251,7 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
                   <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-3">
                     <Detail label={t.detail.pigment} value={tx.pigment_used} />
                     <Detail label={t.detail.payment} value={tx.payment_method} />
-                    <Detail label={t.customers.columns.status}
-                            value={tx.status === 'completed' ? t.treatments.completed : t.treatments.inProgress} />
+                    <Detail label={t.customers.columns.status} value={statusLabel(tx.status, t)} />
                   </dl>
 
                   {tx.remark && (
@@ -198,6 +318,30 @@ export function TreatmentHistory({ treatments, nodes, onChanged }: {
       </ul>
     </Card>
   )
+}
+
+/** Exhaustive on purpose. The previous `=== 'completed' ? … : inProgress`
+ *  silently labelled a future booking as 跟進中, which read as a visit that had
+ *  already happened. A new status landing here should be visible, not absorbed. */
+function statusLabel(status: string, t: ReturnType<typeof useI18n>['t']): string {
+  switch (status) {
+    case 'completed':   return t.treatments.completed
+    case 'in_progress': return t.treatments.inProgress
+    case 'scheduled':   return t.treatments.scheduled
+    default:            return status
+  }
+}
+
+/** Local-time YYYY-MM-DD. `toISOString()` is UTC, which in Hong Kong (UTC+8)
+ *  pushes anything before 08:00 back onto the previous day. */
+function toLocalDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function toLocalTime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {

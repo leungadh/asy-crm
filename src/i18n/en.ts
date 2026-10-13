@@ -105,6 +105,13 @@ export const en: Dictionary = {
     expandAll: 'Expand all',
     collapseAll: 'Collapse all',
     back: 'Back to customers',
+    upcoming: 'Upcoming',
+    upcomingHint: 'Booked, not yet carried out',
+    apptReview: 'Review booking',
+    apptTreatment: 'Booked treatment',
+    apptPassed: 'Booked time has passed',
+    amountPending: 'Amount not set',
+    noTimeSet: 'No time set',
   },
 
   status: {

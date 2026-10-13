@@ -663,6 +663,85 @@ const cats = (await c.query(`
   from ledger_categories where is_active group by direction order by direction`)).rows
 for (const r of cats) console.log(`   ↳ ${r.direction}: ${r.names}`)
 
+// ── 療程歷史 "即將到來" band: the customer-detail read path ─────────────────
+// Two different tables feed this band, and before this change neither was
+// surfaced correctly: scheduled treatments rendered as 跟進中, and 回診
+// appointments were never queried at all.
+console.log('\n════ UPCOMING ON CUSTOMER DETAIL ════')
+
+const ucust = (await c.query(`insert into customers (name) values ('Upcoming Test') returning id`)).rows[0].id
+const uareola = (await c.query(`select id from services where code='areola'`)).rows[0].id
+
+// A future booking: a treatments row at status 'scheduled', no amount.
+const ubooking = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, start_time, status)
+  values ('${ucust}','${uareola}', current_date + 10, '14:30', 'scheduled') returning id`)).rows[0].id
+// A performed visit, so the past/upcoming split has something on both sides.
+const uvisit = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${ucust}','${uareola}', current_date - 30, 3800, 'in_progress') returning id`)).rows[0].id
+
+await check('A scheduled treatment carries no amount, so the UI must not print $0',
+  `select (amount is null)::text result from treatments where id='${ubooking}'`, 'true')
+await check('The past/upcoming split leaves exactly one visit in the history list',
+  `select count(*)::text result from treatments
+     where customer_id='${ucust}' and status <> 'scheduled'`, '1')
+await check('...and exactly one row in the 即將到來 band',
+  `select count(*)::text result from treatments
+     where customer_id='${ucust}' and status = 'scheduled'`, '1')
+
+// 回診 bookings: the exact filter useCustomerDetail issues.
+// service_id lives on the view, not the table — migration 0006 appended it there.
+const ureview = (await c.query(`
+  select id, service_id from v_followup_board
+  where treatment_id='${uvisit}' and node_type='review' limit 1`)).rows[0]
+await c.query(`
+  insert into appointments (customer_id, type, service_id, followup_node_id, starts_at, duration_minutes)
+  values ('${ucust}','review','${ureview.service_id}','${ureview.id}', now() + interval '5 days', 60)`)
+await c.query(`
+  insert into appointments (customer_id, type, service_id, starts_at, status)
+  values ('${ucust}','review','${ureview.service_id}', now() + interval '6 days', 'cancelled')`)
+await c.query(`
+  insert into appointments (customer_id, type, service_id, starts_at, status)
+  values ('${ucust}','review','${ureview.service_id}', now() - interval '40 days', 'completed')`)
+
+await check('The band query returns only the live booking, not cancelled or completed',
+  `select count(*)::text result from appointments
+     where customer_id='${ucust}' and status = 'scheduled'`, '1')
+await check('...and it joins to a service for its badge',
+  `select (s.name_zh is not null)::text result from appointments a
+     left join services s on s.id = a.service_id
+     where a.customer_id='${ucust}' and a.status='scheduled'`, 'true')
+
+// A booked time that has passed but was never closed off must stay visible —
+// filtering on starts_at >= now() would hide exactly the row worth chasing.
+await c.query(`
+  insert into appointments (customer_id, type, service_id, starts_at, status)
+  values ('${ucust}','review','${ureview.service_id}', now() - interval '2 days', 'scheduled')`)
+await check('A past-dated booking still marked scheduled is NOT hidden',
+  `select count(*)::text result from appointments
+     where customer_id='${ucust}' and status='scheduled'`, '2')
+
+// The silent-empty failure mode: RLS must let staff read appointments at all.
+await c.query(`set role authenticated`)
+await c.query(`select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111',false)`)
+const apptAsStaff = (await c.query(
+  `select count(*)::int n from appointments where customer_id='${ucust}' and status='scheduled'`)).rows[0].n
+await c.query(`select set_config('request.jwt.claim.sub','22222222-2222-2222-2222-222222222222',false)`)
+const apptAsStranger = (await c.query(
+  `select count(*)::int n from appointments where customer_id='${ucust}'`)).rows[0].n
+await c.query(`reset role`)
+console.log(`${apptAsStaff === 2 ? '✅' : '❌'} Allowlisted user reads ${apptAsStaff} upcoming bookings`)
+console.log(`${apptAsStranger === 0 ? '✅' : '❌'} Non-allowlisted user reads ${apptAsStranger} bookings`)
+if (apptAsStaff !== 2 || apptAsStranger !== 0) process.exitCode = 1
+
+await check('A scheduled treatment is still excluded from revenue',
+  `select coalesce(count(*),0)::text result from ledger_entries where treatment_id='${ubooking}'`, '0')
+
+await c.query(`delete from customers where id='${ucust}'`)
+await check('Deleting the customer cascades their bookings away',
+  `select count(*)::text result from appointments where customer_id='${ucust}'`, '0')
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');

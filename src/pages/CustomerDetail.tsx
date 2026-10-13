@@ -23,7 +23,7 @@ export default function CustomerDetail() {
   if (loading) return <AppShell title={t.common.loading}><Spinner label={t.common.loading} /></AppShell>
   if (error || !data) return <AppShell title={t.common.error}><EmptyState>{error}</EmptyState></AppShell>
 
-  const { customer: c, treatments, nodes, purchases } = data
+  const { customer: c, treatments, nodes, purchases, appointments } = data
   const wa = waLink(c.phone)
 
   // Purchase totals, as the mockup's 累計購買總結 chips
@@ -160,7 +160,12 @@ export default function CustomerDetail() {
 
         {/* ── Right column ────────────────────────────────────────────── */}
         <div className="space-y-5">
-          <TreatmentHistory treatments={treatments} nodes={nodes} onChanged={refetch} />
+          <TreatmentHistory
+            treatments={treatments}
+            appointments={appointments}
+            nodes={nodes}
+            onChanged={refetch}
+          />
 
           <Card>
             <CardHeader

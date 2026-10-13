@@ -103,6 +103,13 @@ export const zhHK = {
     expandAll: '全部展開',
     collapseAll: '全部收起',
     back: '返回客人列表',
+    upcoming: '即將到來',
+    upcomingHint: '已預約，尚未進行',
+    apptReview: '回診預約',
+    apptTreatment: '預約療程',
+    apptPassed: '已過預約時間',
+    amountPending: '金額未定',
+    noTimeSet: '未定時間',
   },
 
   status: {
