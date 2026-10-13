@@ -41,6 +41,71 @@ export async function saveCustomer(input: CustomerInput, id?: string) {
   return data.id as string
 }
 
+/** Status is a judgement call Yoyo makes (沉睡客 vs 已完成 is never derived), so
+ *  it gets a one-field update of its own rather than requiring the whole edit
+ *  form to be opened and re-saved. */
+export async function setCustomerStatus(id: string, status: CustomerStatus) {
+  const { error } = await supabase.from('customers').update({ status }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** What a delete would take with it. Every one of these cascades, including the
+ *  income rows behind the treatments and purchases — so a month's revenue in
+ *  統計報表 changes retroactively. Yoyo sees these numbers before confirming;
+ *  guessing at them is how a real client gets deleted instead of a test one. */
+export interface CustomerImpact {
+  treatments: number
+  bookings: number
+  purchases: number
+  appointments: number
+  /** Income that genuinely disappears — only rows cascading via treatment_id or
+   *  purchase_id. */
+  income: number
+  /** Manually-entered ledger rows tagged to this customer. These do NOT cascade
+   *  (`customer_id` is `on delete set null`): the money stays in the reports and
+   *  only loses its name. Counted separately so the figure above stays honest. */
+  detachedEntries: number
+}
+
+export async function getCustomerImpact(id: string): Promise<CustomerImpact> {
+  const [tx, purch, appt, led] = await Promise.all([
+    supabase.from('treatments').select('id, status').eq('customer_id', id),
+    supabase.from('customer_purchases').select('id').eq('customer_id', id),
+    supabase.from('appointments').select('id').eq('customer_id', id),
+    supabase.from('ledger_entries')
+      .select('amount, direction, treatment_id, purchase_id').eq('customer_id', id),
+  ])
+
+  const err = tx.error ?? purch.error ?? appt.error ?? led.error
+  if (err) throw new Error(err.message)
+
+  const rows = tx.data ?? []
+  const ledger = led.data ?? []
+  const cascades = (r: { treatment_id: string | null; purchase_id: string | null }) =>
+    r.treatment_id !== null || r.purchase_id !== null
+
+  return {
+    treatments:   rows.filter((r) => r.status !== 'scheduled').length,
+    bookings:     rows.filter((r) => r.status === 'scheduled').length,
+    purchases:    (purch.data ?? []).length,
+    appointments: (appt.data ?? []).length,
+    income: ledger
+      .filter((r) => r.direction === 'income' && cascades(r))
+      .reduce((sum, r) => sum + Number(r.amount ?? 0), 0),
+    detachedEntries: ledger.filter((r) => !cascades(r)).length,
+  }
+}
+
+/** Hard delete. There is no undo short of restoring a backup, which is why the
+ *  UI requires the customer's name to be typed first.
+ *
+ *  Deliberately NOT a soft delete: the point is removing test records, and an
+ *  archived fake client would leave its fake revenue sitting in the reports. */
+export async function deleteCustomer(id: string) {
+  const { error } = await supabase.from('customers').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 export interface TreatmentInput {
   customer_id: string
   service_id: string

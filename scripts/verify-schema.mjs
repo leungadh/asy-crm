@@ -101,10 +101,11 @@ await check('Lip treatments each generated 3 nodes',
   `select count(*)::text result from treatments t join services s on s.id=t.service_id
      where s.code='lip' and t.status <> 'scheduled'
        and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 3`, '0');
-await check('Body treatments each generated 1 node',
+// Was 1 node until 0015 added the 1-week follow-up ahead of the 3-week one.
+await check('Body treatments each generated 2 nodes',
   `select count(*)::text result from treatments t join services s on s.id=t.service_id
      where s.code='body' and t.status <> 'scheduled'
-       and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 1`, '0');
+       and (select count(*) from followup_nodes n where n.treatment_id=t.id) <> 2`, '0');
 await check('Only Areola/VIO have review nodes',
   `select count(*)::text result from followup_nodes n
      join treatments t on t.id=n.treatment_id join services s on s.id=t.service_id
@@ -741,6 +742,108 @@ await check('A scheduled treatment is still excluded from revenue',
 await c.query(`delete from customers where id='${ucust}'`)
 await check('Deleting the customer cascades their bookings away',
   `select count(*)::text result from appointments where customer_id='${ucust}'`, '0')
+
+// ── 0015: 身體部位 gains a 1-week follow-up ────────────────────────────────
+console.log('\n════ 0015 BODY FOLLOW-UP ════')
+
+await check('Body now has 2 follow-up rules',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code = 'body'`, '2')
+await check('...the 1-week rule is sequence 1',
+  `select offset_days::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code='body' and r.sequence = 1`, '7')
+await check('...and the original 3-week rule moved to sequence 2, not lost',
+  `select offset_days::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code='body' and r.sequence = 2`, '21')
+await check('No body rule was left parked on a temporary sequence',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code='body' and r.sequence >= 900`, '0')
+await check('Neither body rule is a 回診',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id
+     where s.code='body' and r.node_type = 'review'`, '0')
+
+// A new body treatment must now generate both nodes, in the right order.
+const bodycust = (await c.query(`insert into customers (name) values ('Body Test') returning id`)).rows[0].id
+const bodysvc  = (await c.query(`select id from services where code='body'`)).rows[0].id
+const bodytx = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${bodycust}','${bodysvc}', current_date, 1800, 'in_progress') returning id`)).rows[0].id
+
+await check('A new body treatment generates 2 nodes',
+  `select count(*)::text result from followup_nodes where treatment_id='${bodytx}'`, '2')
+await check('...ordered 1星期跟進 then 3星期跟進',
+  `select string_agg(label_zh, ' → ' order by sequence) result
+     from followup_nodes where treatment_id='${bodytx}'`, '1星期跟進 → 3星期跟進')
+await check('...with due dates 7 and 21 days out',
+  `select string_agg(((due_at at time zone 'Asia/Hong_Kong')::date - current_date)::text, ',' order by sequence) result
+     from followup_nodes where treatment_id='${bodytx}'`, '7,21')
+
+await c.query(`delete from customers where id='${bodycust}'`)
+
+// Re-running the migration must not add a second 1-week rule.
+await c.query(await import('node:fs').then((fs) =>
+  fs.readFileSync('./supabase/migrations/20261013000015_body_one_week_followup.sql', 'utf8')))
+await check('0015 is idempotent — re-running adds no duplicate rule',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code = 'body'`, '2')
+
+// ── Customer status + delete, as the UI performs them ─────────────────────
+console.log('\n════ CUSTOMER STATUS & DELETE ════')
+
+const dcust = (await c.query(`
+  insert into customers (name, status) values ('Delete Test', 'active_followup') returning id`)).rows[0].id
+
+// setCustomerStatus(): a single-column update, not a whole-row re-save.
+await c.query(`update customers set status='completed' where id='${dcust}'`)
+await check('Status can be set to 已完成 on its own',
+  `select status::text result from customers where id='${dcust}'`, 'completed')
+let badStatus = false
+try { await c.query(`update customers set status='finished' where id='${dcust}'`) }
+catch { badStatus = true }
+console.log(`${badStatus ? '✅' : '❌'} An unknown status is rejected by the enum`)
+if (!badStatus) process.exitCode = 1
+
+// getCustomerImpact(): the counts shown before confirming must match reality.
+const dtx = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${dcust}','${bodysvc}', current_date, 1800, 'in_progress') returning id`)).rows[0].id
+await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, status)
+  values ('${dcust}','${bodysvc}', current_date + 7, 'scheduled')`)
+// A manual ledger row tagged to the customer. This must NOT be counted as income
+// that disappears — customer_id is `on delete set null`, so the money survives.
+await c.query(`
+  insert into ledger_entries (entry_date, direction, category, item, amount, customer_id, is_auto)
+  values (current_date, 'income', '訂金收入', 'Manual deposit', 500, '${dcust}', false)`)
+
+await check('Impact counts 1 performed treatment',
+  `select count(*)::text result from treatments
+     where customer_id='${dcust}' and status <> 'scheduled'`, '1')
+await check('...and 1 booking, counted separately',
+  `select count(*)::text result from treatments
+     where customer_id='${dcust}' and status = 'scheduled'`, '1')
+await check('Cascading income is the auto treatment row only, not the manual one',
+  `select sum(amount)::int::text result from ledger_entries
+     where customer_id='${dcust}' and direction='income'
+       and (treatment_id is not null or purchase_id is not null)`, '1800')
+await check('The manual entry is reported as detached, not as lost income',
+  `select count(*)::text result from ledger_entries
+     where customer_id='${dcust}' and treatment_id is null and purchase_id is null`, '1')
+
+await c.query(`delete from customers where id='${dcust}'`)
+await check('Deleting removes the customer',
+  `select count(*)::text result from customers where id='${dcust}'`, '0')
+await check('...their treatments and follow-up nodes',
+  `select (
+     (select count(*) from treatments where customer_id='${dcust}') +
+     (select count(*) from followup_nodes where treatment_id='${dtx}')
+   )::text result`, '0')
+await check('...and the auto income row behind them',
+  `select count(*)::text result from ledger_entries where treatment_id='${dtx}'`, '0')
+await check('The manual ledger row survives, with its customer link cleared',
+  `select (count(*) filter (where customer_id is null))::text result
+     from ledger_entries where item = 'Manual deposit'`, '1')
 
 await c.end();
 await pg.stop();

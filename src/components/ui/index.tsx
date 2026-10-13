@@ -21,7 +21,7 @@ export function CardHeader({ title, action, className }: { title: ReactNode; act
 
 /* ─── Button ────────────────────────────────────────────────────────────── */
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'outline' | 'ghost' | 'whatsapp'
+  variant?: 'primary' | 'outline' | 'ghost' | 'whatsapp' | 'danger'
   size?: 'sm' | 'md'
 }
 
@@ -40,6 +40,9 @@ export function Button({ variant = 'outline', size = 'md', className, ...props }
         variant === 'ghost' && 'text-ink-500 hover:bg-cream-100',
         variant === 'whatsapp' &&
           'border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50',
+        // Solid red, reserved for actions with no undo.
+        variant === 'danger' &&
+          'bg-red-600 text-white hover:bg-red-700',
         className,
       )}
       {...props}

@@ -1,24 +1,34 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ChevronLeft, AtSign, Phone, Plus, Pencil } from 'lucide-react'
+import { Link, useParams, useNavigate } from 'react-router-dom'
+import { ChevronLeft, AtSign, Phone, Plus, Pencil, Trash2 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Spinner } from '@/components/ui'
-import { CustomerStatusBadge, NodeStatusBadge } from '@/components/ui/statusBadge'
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Select, Spinner } from '@/components/ui'
+import { NodeStatusBadge } from '@/components/ui/statusBadge'
+import { useToast } from '@/components/ui/toast'
 import { useCustomerDetail } from '@/hooks/useCustomers'
 import { useI18n } from '@/i18n'
 import { formatMoney, waLink } from '@/lib/utils'
+import { setCustomerStatus } from '@/lib/mutations'
 import { CustomerForm } from '@/components/forms/CustomerForm'
 import { TreatmentForm } from '@/components/forms/TreatmentForm'
 import { PurchaseForm } from '@/components/forms/PurchaseForm'
+import { DeleteCustomerModal } from '@/components/forms/DeleteCustomerModal'
 import { TreatmentHistory } from '@/components/TreatmentHistory'
+import type { CustomerStatus } from '@/types/database'
+
+const STATUSES = ['active_followup', 'pending_review', 'dormant', 'completed'] as const
 
 export default function CustomerDetail() {
   const { id } = useParams()
   const { t } = useI18n()
+  const toast = useToast()
+  const navigate = useNavigate()
   const { data, loading, error, refetch } = useCustomerDetail(id)
   const [editing, setEditing] = useState(false)
   const [addingTreatment, setAddingTreatment] = useState(false)
   const [addingPurchase, setAddingPurchase] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [savingStatus, setSavingStatus] = useState(false)
 
   if (loading) return <AppShell title={t.common.loading}><Spinner label={t.common.loading} /></AppShell>
   if (error || !data) return <AppShell title={t.common.error}><EmptyState>{error}</EmptyState></AppShell>
@@ -36,6 +46,22 @@ export default function CustomerDetail() {
   const age = c.birthday ? new Date().getFullYear() - new Date(c.birthday).getFullYear() : null
   const reviewNode = nodes.find((n) => n.node_type === 'review' && n.display_status !== 'done')
 
+  // 沉睡客 vs 已完成 is a judgement call, never derived — so it gets a direct
+  // control here rather than making Yoyo open and re-save the whole edit form.
+  async function onStatusChange(next: CustomerStatus) {
+    if (!id || next === c.status) return
+    setSavingStatus(true)
+    try {
+      await setCustomerStatus(id, next)
+      toast(t.detail.statusChanged.replace('{name}', t.status[next]))
+      refetch()
+    } catch (e) {
+      toast(`${t.detail.statusFailed}: ${(e as Error).message}`, 'error')
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
   return (
     <AppShell
       title={
@@ -52,6 +78,15 @@ export default function CustomerDetail() {
           </Button>
           <Button size="sm" variant="primary" onClick={() => setAddingTreatment(true)}>
             <Plus className="size-4" /><span className="hidden sm:inline">{t.customers.addTreatment}</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDeleting(true)}
+            title={t.detail.deleteCustomer}
+            className="text-ink-400 hover:bg-red-50 hover:text-red-600"
+          >
+            <Trash2 className="size-3.5" />
           </Button>
         </>
       }
@@ -73,6 +108,13 @@ export default function CustomerDetail() {
         onClose={() => setAddingPurchase(false)}
         onSaved={() => refetch()}
         customerId={c.id}
+      />
+      <DeleteCustomerModal
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => navigate('/customers')}
+        customerId={c.id}
+        customerName={c.name}
       />
 
       <Link to="/customers" className="mb-4 inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-700 lg:hidden">
@@ -107,7 +149,23 @@ export default function CustomerDetail() {
           <div className="grid flex-1 grid-cols-3 gap-x-6 gap-y-3 border-cream-200 lg:border-l lg:pl-6">
             <Stat label={t.detail.visits} value={String(c.visit_count ?? 0)} />
             <Stat label={t.detail.lifetimeValue} value={formatMoney(c.lifetime_value)} />
-            <Stat label={t.customers.columns.status} value={<CustomerStatusBadge status={c.status} />} />
+            <Stat
+              label={t.customers.columns.status}
+              value={
+                <Select
+                  aria-label={t.detail.changeStatus}
+                  title={t.detail.changeStatus}
+                  value={c.status}
+                  disabled={savingStatus}
+                  onChange={(e) => onStatusChange(e.target.value as CustomerStatus)}
+                  className="mt-0.5 h-8 w-full max-w-[9rem] py-0 text-[13px]"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>{t.status[s]}</option>
+                  ))}
+                </Select>
+              }
+            />
           </div>
 
           {wa && (
