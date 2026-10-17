@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/toast'
 import { useI18n } from '@/i18n'
 import { useServices } from '@/hooks/useCustomers'
 import { useAuth } from '@/hooks/useAuth'
-import { createTreatment } from '@/lib/mutations'
+import { createTreatment, findOpenReviewNode, updateNodeStatus } from '@/lib/mutations'
 import { PAYMENT_METHODS } from '@/types/database'
 import { cn } from '@/lib/utils'
 
@@ -46,6 +46,13 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
   const [remark, setRemark] = useState('')
 
   const targetCustomer = customerId ?? pickedCustomer
+
+  // Set once a 回診 has been recorded and the client still has an open review
+  // node. 回診 means two things in this app — the plan and the visit — and this
+  // is where they are joined up. An offer, not an automatic write: only Yoyo
+  // knows whether that particular node is the one this visit satisfied.
+  const [reviewNode, setReviewNode] =
+    useState<{ id: string; label_zh: string; label_en: string } | null>(null)
 
   function reset() {
     setPickedCustomer(''); setServiceId(''); setDetail(''); setAmount('')
@@ -85,8 +92,18 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
       }, staff?.id)
 
       toast(t.form.saved)
-      reset()
       onSaved()
+
+      // A recorded 回診 usually completes the review node that planned it, but
+      // the lookup must not be able to lose the save that already succeeded.
+      if (mode === 'record' && selected?.code === 'review') {
+        try {
+          const node = await findOpenReviewNode(targetCustomer)
+          if (node) { setReviewNode(node); setSaving(false); return }
+        } catch { /* the treatment is saved; the offer is a convenience */ }
+      }
+
+      reset()
       onClose()
     } catch (e) {
       toast(`${t.form.saveFailed}: ${(e as Error).message}`, 'error')
@@ -96,6 +113,53 @@ export function TreatmentForm({ open, onClose, onSaved, customerId, defaultMode 
   }
 
   const selected = services.find((s) => s.id === serviceId)
+
+  function dismissReviewPrompt() {
+    setReviewNode(null)
+    reset()
+    onClose()
+  }
+
+  async function confirmReviewNode() {
+    if (!reviewNode) return
+    setSaving(true)
+    try {
+      await updateNodeStatus(reviewNode.id, 'done')
+      toast(t.reviewPrompt.done)
+      onSaved()
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setSaving(false)
+      dismissReviewPrompt()
+    }
+  }
+
+  if (reviewNode) {
+    return (
+      <Modal
+        open={open}
+        onClose={dismissReviewPrompt}
+        title={t.reviewPrompt.title}
+        width="sm"
+        footer={
+          <>
+            <Button onClick={dismissReviewPrompt} disabled={saving}>{t.reviewPrompt.skip}</Button>
+            <Button variant="primary" onClick={confirmReviewNode} disabled={saving}>
+              {t.reviewPrompt.confirm}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-700">
+          {t.reviewPrompt.body.replace(
+            '{label}',
+            locale === 'en' ? reviewNode.label_en : reviewNode.label_zh,
+          )}
+        </p>
+      </Modal>
+    )
+  }
 
   return (
     <Modal

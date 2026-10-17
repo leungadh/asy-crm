@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, CalendarPlus, CalendarClock, AlertTriangle } from 'lucide-react'
+import { ChevronDown, CalendarPlus, CalendarClock, AlertTriangle, Pencil } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, EmptyState, type BadgeTone } from '@/components/ui'
 import { NodeStatusBadge } from '@/components/ui/statusBadge'
 import { NodeActions } from '@/components/forms/NodeActions'
+import { EditTreatmentModal } from '@/components/forms/EditTreatmentModal'
 import { useI18n } from '@/i18n'
 import { cn, formatMoney } from '@/lib/utils'
 import type { CustomerDetailData } from '@/hooks/useCustomers'
@@ -102,6 +103,8 @@ export function TreatmentHistory({ treatments, appointments, nodes, onChanged }:
     () => new Set(past.length ? [past[0].id] : []),
   )
 
+  const [editing, setEditing] = useState<CustomerDetailData['treatments'][number] | null>(null)
+
   const toggle = (id: string) =>
     setOpen((prev) => {
       const next = new Set(prev)
@@ -122,6 +125,15 @@ export function TreatmentHistory({ treatments, appointments, nodes, onChanged }:
 
   return (
     <Card>
+      {editing && (
+        <EditTreatmentModal
+          open
+          onClose={() => setEditing(null)}
+          onSaved={onChanged}
+          treatment={editing}
+        />
+      )}
+
       <CardHeader
         title={
           <span>
@@ -261,7 +273,12 @@ export function TreatmentHistory({ treatments, appointments, nodes, onChanged }:
                     </div>
                   )}
 
-                  <p className="mb-2 text-xs font-medium text-ink-500">{t.detail.thisVisitFollowups}</p>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-medium text-ink-500">{t.detail.thisVisitFollowups}</p>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(tx)}>
+                      <Pencil className="size-3.5" />{t.editTreatment.edit}
+                    </Button>
+                  </div>
 
                   {txNodes.length === 0 ? (
                     <p className="rounded-lg border border-cream-200 bg-white px-4 py-3 text-[13px] text-ink-400">

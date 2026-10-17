@@ -48,7 +48,10 @@ export interface CustomerSummary extends Customer {
 
 export interface Service {
   id: string
-  code: 'areola' | 'vio' | 'lip' | 'body'
+  // 'combo' arrived in migration 0014 and 'review' (回診) in 0016. This union
+  // was left behind by 0014, so the stale version silently typed combo out of
+  // existence — widen it whenever a service is added.
+  code: 'areola' | 'vio' | 'lip' | 'body' | 'combo' | 'review'
   name_zh: string
   name_en: string
   accent: string

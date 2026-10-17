@@ -382,10 +382,106 @@ export async function rescheduleTreatment(
 
 export async function cancelBooking(id: string) {
   // Only a booking can be deleted outright. A performed treatment carries a
-  // follow-up timeline and an income row, so it must be reversed deliberately.
+  // follow-up timeline and an income row, so it goes through deleteTreatment()
+  // below, which shows what it is about to destroy first.
   const { error } = await supabase
     .from('treatments').delete().eq('id', id).eq('status', 'scheduled')
   if (error) throw new Error(error.message)
+}
+
+export interface EditTreatmentInput {
+  service_id: string
+  detail?: string
+  treatment_date: string
+  start_time?: string
+  duration_minutes: number
+  amount: number | null
+  payment_method?: string
+  pigment_used?: string
+  remark?: string
+}
+
+/** Edits a treatment that has already been performed.
+ *
+ *  Two database triggers react to this and neither is invoked here:
+ *  - the ledger trigger re-syncs the income row (it watches treatment_date,
+ *    amount, payment_method and service_id);
+ *  - 0016's trigger shifts any follow-up node still `pending` by the same
+ *    number of days the date moved, leaving actioned nodes alone.
+ *
+ *  `status` is deliberately absent. Moving between scheduled and performed is
+ *  what completeTreatment() is for, and letting it be edited here would fire
+ *  timeline generation as a side effect of fixing a typo. */
+export async function updateTreatment(id: string, input: EditTreatmentInput) {
+  const { error } = await supabase
+    .from('treatments')
+    .update({
+      service_id: input.service_id,
+      detail: nz(input.detail),
+      treatment_date: input.treatment_date,
+      start_time: nz(input.start_time),
+      duration_minutes: input.duration_minutes,
+      amount: input.amount,
+      payment_method: nz(input.payment_method),
+      pigment_used: nz(input.pigment_used),
+      remark: nz(input.remark),
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export interface TreatmentImpact {
+  amount: number | null
+  incomeRows: number
+  nodes: number
+  /** Follow-up nodes Yoyo has already acted on. Losing these loses a record of
+   *  contact that actually happened, which is worth saying out loud. */
+  actionedNodes: number
+}
+
+export async function getTreatmentImpact(id: string): Promise<TreatmentImpact> {
+  const [tx, nodes, led] = await Promise.all([
+    supabase.from('treatments').select('amount').eq('id', id).maybeSingle(),
+    supabase.from('followup_nodes').select('status').eq('treatment_id', id),
+    supabase.from('ledger_entries').select('id').eq('treatment_id', id),
+  ])
+
+  const err = tx.error ?? nodes.error ?? led.error
+  if (err) throw new Error(err.message)
+
+  const rows = nodes.data ?? []
+  return {
+    amount: tx.data?.amount != null ? Number(tx.data.amount) : null,
+    incomeRows: (led.data ?? []).length,
+    nodes: rows.length,
+    actionedNodes: rows.filter((n) => n.status !== 'pending').length,
+  }
+}
+
+/** Deletes a treatment whatever its status, taking its follow-up timeline and
+ *  its income row with it (both cascade). No undo short of a backup restore,
+ *  so the UI shows the impact above before calling this. */
+export async function deleteTreatment(id: string) {
+  const { error } = await supabase.from('treatments').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/** The open 回診 node for a customer, if there is one.
+ *
+ *  Used after recording a 回診 treatment: the visit has happened, so the node
+ *  planning it is almost certainly complete. Almost — hence an offer, not an
+ *  automatic write. */
+export async function findOpenReviewNode(customerId: string) {
+  const { data, error } = await supabase
+    .from('v_followup_board')
+    .select('id, label_zh, label_en, due_date')
+    .eq('customer_id', customerId)
+    .eq('node_type', 'review')
+    .not('display_status', 'in', '("done","skipped")')
+    .order('due_at')
+    .limit(1)
+  if (error) throw new Error(error.message)
+  return data?.[0] ?? null
 }
 
 export async function saveAppSetting(key: string, value: number) {

@@ -427,6 +427,31 @@ export const zhHK = {
     saved: '已儲存',
   },
 
+  editTreatment: {
+    title: '編輯療程記錄',
+    hint: '修改金額或付款方式會同步更新「收入支出」的收入紀錄。',
+    dateMovedHint: '更改日期後，尚未跟進的節點會一併順延；已聯絡或已完成的節點維持原日期。收入紀錄亦會同步更新。',
+    deleteTitle: '刪除療程記錄',
+    deleteIntro: '即將刪除 {date} 的療程記錄。此操作無法復原。',
+    deleteWillRemove: '以下紀錄會一併刪除',
+    deleteIncome: '收入紀錄',
+    deleteNodes: '跟進節點',
+    deleteActioned: '其中 {n} 個節點已聯絡或已完成，相關跟進紀錄亦會一併消失。',
+    deleteConfirm: '永久刪除',
+    deleting: '刪除中…',
+    deleted: '已刪除療程記錄',
+    deleteFailed: '刪除失敗',
+    edit: '編輯療程',
+  },
+
+  reviewPrompt: {
+    title: '更新回診節點',
+    body: '已記錄一次回診。要將「{label}」標記為已完成嗎？',
+    confirm: '標記為已完成',
+    skip: '暫時不用',
+    done: '回診節點已標記為已完成',
+  },
+
   common: {
     loading: '載入中…',
     error: '載入失敗',
@@ -438,6 +463,7 @@ export const zhHK = {
     days: (n: number) => `${n} 天`,
     whatsapp: 'WhatsApp',
     none: '—',
+    delete: '刪除',
   },
 }
 // NB: deliberately no `as const`. It would make every value a string *literal*

@@ -429,6 +429,31 @@ export const en: Dictionary = {
     saved: 'Saved',
   },
 
+  editTreatment: {
+    title: 'Edit treatment',
+    hint: 'Changing the amount or payment method updates the matching income row in 收入支出.',
+    dateMovedHint: 'Moving the date also moves follow-ups that have not been acted on yet. Ones already contacted or completed keep their original dates. The income row moves too.',
+    deleteTitle: 'Delete treatment',
+    deleteIntro: 'This deletes the treatment recorded on {date}. It cannot be undone.',
+    deleteWillRemove: 'This will also be deleted',
+    deleteIncome: 'Income row',
+    deleteNodes: 'Follow-up points',
+    deleteActioned: '{n} of those have already been contacted or completed — that record goes too.',
+    deleteConfirm: 'Delete permanently',
+    deleting: 'Deleting…',
+    deleted: 'Treatment deleted',
+    deleteFailed: 'Delete failed',
+    edit: 'Edit treatment',
+  },
+
+  reviewPrompt: {
+    title: 'Update the review point',
+    body: 'A review visit was recorded. Mark "{label}" as completed?',
+    confirm: 'Mark completed',
+    skip: 'Not now',
+    done: 'Review point marked completed',
+  },
+
   common: {
     loading: 'Loading…',
     error: 'Failed to load',
@@ -440,5 +465,6 @@ export const en: Dictionary = {
     days: (n: number) => `${n} days`,
     whatsapp: 'WhatsApp',
     none: '—',
+    delete: 'Delete',
   },
 }

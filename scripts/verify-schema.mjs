@@ -845,6 +845,95 @@ await check('The manual ledger row survives, with its customer link cleared',
   `select (count(*) filter (where customer_id is null))::text result
      from ledger_entries where item = 'Manual deposit'`, '1')
 
+// ── 0016: 回診 as a service, and rescheduling a performed treatment ────────
+console.log('\n════ 0016 回診 SERVICE & RESCHEDULE ════')
+
+await check('回診 exists as a 療程項目',
+  `select name_zh result from services where code = 'review'`, '回診')
+await check('回診 has no follow-up rules of its own',
+  `select count(*)::text result from followup_rules r
+     join services s on s.id = r.service_id where s.code = 'review'`, '0')
+
+const rcust = (await c.query(`insert into customers (name) values ('Review Test') returning id`)).rows[0].id
+const rsvc  = (await c.query(`select id from services where code='review'`)).rows[0].id
+const rtx = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${rcust}','${rsvc}', current_date, 0, 'in_progress') returning id`)).rows[0].id
+
+await check('A 回診 treatment generates no follow-up timeline',
+  `select count(*)::text result from followup_nodes where treatment_id='${rtx}'`, '0')
+await check('...but still books an income row, so a charged 回診 is counted',
+  `select count(*)::text result from ledger_entries where treatment_id='${rtx}'`, '1')
+await check('...and still counts as a visit',
+  `select visit_count::text result from v_customer_summary where id='${rcust}'`, '1')
+await c.query(`delete from customers where id='${rcust}'`)
+
+// Rescheduling: pending nodes move, actioned ones stay put.
+const scust = (await c.query(`insert into customers (name) values ('Shift Test') returning id`)).rows[0].id
+const ssvc  = (await c.query(`select id from services where code='areola'`)).rows[0].id
+const stx = (await c.query(`
+  insert into treatments (customer_id, service_id, treatment_date, amount, status)
+  values ('${scust}','${ssvc}', date '2026-03-02', 4000, 'in_progress') returning id`)).rows[0].id
+
+// Act on the 1-week node, leave the rest untouched.
+const snode = (await c.query(`
+  select id from followup_nodes where treatment_id='${stx}' order by sequence limit 1`)).rows[0].id
+await c.query(`update followup_nodes set status='contacted', contacted_at=now() where id='${snode}'`)
+
+await check('Before the move, the 2-week node is due 2026-03-16',
+  `select (due_at at time zone 'Asia/Hong_Kong')::date::text result
+     from followup_nodes where treatment_id='${stx}' and sequence = 2`, '2026-03-16')
+
+// Correct the date forward by 5 days.
+await c.query(`update treatments set treatment_date = date '2026-03-07' where id='${stx}'`)
+
+await check('A pending node moves with the corrected date',
+  `select (due_at at time zone 'Asia/Hong_Kong')::date::text result
+     from followup_nodes where treatment_id='${stx}' and sequence = 2`, '2026-03-21')
+await check('An already-contacted node keeps its original date',
+  `select (due_at at time zone 'Asia/Hong_Kong')::date::text result
+     from followup_nodes where id='${snode}'`, '2026-03-09')
+await check('The review window end shifts with its node',
+  `select window_end_date::text result from followup_nodes
+     where treatment_id='${stx}' and node_type='review'`, '2026-04-25')
+await check('The income row follows the date too',
+  `select entry_date::text result from ledger_entries where treatment_id='${stx}'`, '2026-03-07')
+
+// Writing the same date again must be a no-op, not another shift.
+await c.query(`update treatments set treatment_date = date '2026-03-07' where id='${stx}'`)
+await check('Re-saving the same date shifts nothing',
+  `select (due_at at time zone 'Asia/Hong_Kong')::date::text result
+     from followup_nodes where treatment_id='${stx}' and sequence = 2`, '2026-03-21')
+
+// Moving backwards must work as well as forwards.
+await c.query(`update treatments set treatment_date = date '2026-03-04' where id='${stx}'`)
+await check('Moving the date earlier pulls pending nodes back',
+  `select (due_at at time zone 'Asia/Hong_Kong')::date::text result
+     from followup_nodes where treatment_id='${stx}' and sequence = 2`, '2026-03-18')
+
+// updateTreatment(): editing other fields re-syncs the ledger row.
+await c.query(`
+  update treatments set amount = 5200, payment_method = 'FPS - Yoyo' where id='${stx}'`)
+await check('Editing amount and payment method re-syncs the income row',
+  `select (amount::int || '/' || payment_method) result
+     from ledger_entries where treatment_id='${stx}'`, '5200/FPS - Yoyo')
+
+// deleteTreatment(): a performed treatment can now be removed outright.
+const snodeCount = (await c.query(
+  `select count(*)::int n from followup_nodes where treatment_id='${stx}'`)).rows[0].n
+console.log(`${snodeCount === 5 ? '✅' : '❌'} Impact reports ${snodeCount} follow-up nodes before deleting`)
+if (snodeCount !== 5) process.exitCode = 1
+
+await c.query(`delete from treatments where id='${stx}'`)
+await check('Deleting a performed treatment removes its nodes and income row',
+  `select (
+     (select count(*) from followup_nodes where treatment_id='${stx}') +
+     (select count(*) from ledger_entries where treatment_id='${stx}')
+   )::text result`, '0')
+await check('...and leaves the customer in place',
+  `select count(*)::text result from customers where id='${scust}'`, '1')
+await c.query(`delete from customers where id='${scust}'`)
+
 await c.end();
 await pg.stop();
 console.log(process.exitCode ? '\n🔴 FAILURES ABOVE' : '\n🟢 ALL CHECKS PASSED');
