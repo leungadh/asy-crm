@@ -10,6 +10,10 @@ DESIGN.md
 PROJECT-NOTES.md
 docs/
 
+# Working notes for Claude: schema invariants, traps, business context.
+# Same material as DESIGN.md, so it gets the same treatment.
+CLAUDE.md
+
 # Design reference mockups — keep local, ~8.7 MB
 sample_images/
 
